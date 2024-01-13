@@ -16,27 +16,29 @@ Tools to assist in running an amateur music society.
 
 * Rental Database.
     * List of pieces/equipment rented from where, return date, cost etc.
-    * Possibly rentals out?
+    * Possibly rentals out?***
 
 * Venue Database.
     * Address.
     * Parking.
     * Contact details.
 
-* Performance Database
-    * Include templating option for similar concerts
-    * Time, venue, repertoire, rehearsal/performance order, description, "don't forget to bring"
-    * Positions required, seating plan (optional)
-    * Positions to player map (optional)
-    * Map to rentals/library
-    * Extra players used (costs?)
-
 * Rehearsal Database
-    * Venue
-    * Time
+    * Venue.
+    * Time.
         * Option for recurring with different rehearsal orders?
-    * Map to library/rentals
-        * Rehearsal Order
+    * Map to library/rentals.
+        * Rehearsal Order.
+
+
+* Performance Database
+    * Include templating option for similar concerts***
+    * Time, venue, repertoire, rehearsal/performance order, description, "don't forget to bring".
+    * Positions required, seating plan (optional).
+    * Positions to player map (optional).
+    * Map to rentals/library.
+    * Extra players used (costs?)***
+
 
 
 
@@ -74,4 +76,3 @@ Tools to assist in running an amateur music society.
         * Costs
         * Room charging to players
         * Room shares
-        
