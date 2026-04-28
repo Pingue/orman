@@ -1,0 +1,108 @@
+{% extends "base.html" %} 
+{% block content %} 
+    <script>
+    var csrftoken = '{{ csrf_token }}';
+    function getCell(button) {
+        return button.closest('tr').find('td:first');
+    }
+
+    function updateRow(button, isEditMode, value) {
+        console.log(button);
+        var row = getCell(button).parent();
+        if (isEditMode) {
+            row.html('<td><input type="text" value="' + value + '" data-original-value="' + value + '"></td><td><a href="#" class="button is-small is-primary save">Save</a> <a href="#" class="button is-small is-danger cancel">Cancel</a></td>');
+        } else {
+            row.html('<td>'+value+'</td><td><a href="#" class="button is-small is-primary edit">Edit</a> <a href="#" class="button is-small is-danger del">Delete</a></td>')
+        }
+        addHandlers();
+    }
+    function addHandlers() {
+        $('.edit').click(function() {
+            var familyName = getCell($(this)).html();
+            updateRow($(this), true, familyName);
+        });
+
+        $('.del').click(function() {
+            var row = $(this).closest('tr');
+            var familyName = getCell($(this)).html();
+            $.ajax({
+                url: '/admin_instrument_family/' + $(this).parent().parent().attr('data-id'),
+                type: 'DELETE',
+                headers: {'X-CSRFToken': csrftoken},
+                success: function(result) {
+                    row.remove();
+                },
+                error: function(result) {
+                    console.log(result);
+                    $("ul.messages").append('<div class="alert alert-danger">Error deleting family: ' + familyName + ': '+result.responseText+'</div>');
+                }
+            });
+        });
+
+        $(".save").click(function() {
+            var input = getCell($(this)).parent().find('input');
+            var newValue = input.val();
+            var id = $(this).parent().parent().attr('data-id');
+            $.ajax({
+                url: '/admin_instrument_family/' + id,
+                type: 'POST',
+                data: { 'name': newValue },
+                headers: {'X-CSRFToken': csrftoken},
+                success: function(result) {
+                    row = $(`tr[data-id="${id}"]`);
+                    updateRow(row.find("a.save"), false, newValue);
+                },
+                error: function(result) {
+                    $("ul.messages").append('<li class="error">Error deleting family: ' + familyName + ': '+result+'</li>');
+                }
+            });
+        });
+
+        $(".cancel").click(function() {
+            var input = getCell($(this)).find('input');
+            var originalValue = input.attr('data-original-value');
+            updateRow($(this), false, originalValue);
+        });
+    }
+    $(document).ready(function() {
+        $('.button#createNew').click(function() {
+            var table = $('.table');
+            var newRow = $('<tr data-id="0"><td></td><td><button/></td></tr>');
+            table.append(newRow);
+            updateRow(newRow.find('button'), true, 'New Family');
+        });
+
+        addHandlers();
+    });
+    </script>
+
+    <h1 class="title is-1">Instrument Families</h1>
+    <div class="container is-centered has-text-right" style="padding-bottom: 20px;">
+        <a href="#" id="createNew" class="button is-primary">Create New</a>
+    </div>
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Holy guacamole!</strong> You should check in on some of those fields below.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <table class="table is-bordered is-striped is-hoverable" style="width: 100%;">
+        <thead>
+        <tr>
+            <th>Family</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for family in families %}
+        <tr data-id="{{family.id}}">
+            <td>{{ family.name }}</td>
+            <td>
+            <a href="#" class="button is-small is-primary edit">Edit</a>
+            <a href="#" class="button is-small is-danger del">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </table>
+</div>
+{% endblock %}

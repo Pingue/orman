@@ -1,0 +1,31 @@
+
+{% extends "base.html" %} 
+{% block content %} 
+    <h1 class="title is-1">Orman Music Group Management System</h1>
+    <div class="card">
+      <div class="card-content">
+        <div class="media">
+          <div class="media-left">
+            <figure class="image is-48x48">
+              <img
+                src="https://bulma.io/assets/images/placeholders/96x96.png"
+                alt="Placeholder image"
+              />
+            </figure>
+          </div>
+          <div class="media-content">
+            <p class="title is-4">Your Profile</p>
+            <p class="subtitle is-6"><a href="/profile">Mike Frost</a></p>
+          </div>
+        </div>
+    
+        <div class="content">
+          <p>Instrument: Viola</p>
+          <p>Next Rehearsal: <a href="/event/1235">7th January, St. Mary's Church</a></p>
+          <p>Next Concert: <a href="/event/1234">5th January, Christ Church Freemantle</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+  {{people}}
+{% endblock %}

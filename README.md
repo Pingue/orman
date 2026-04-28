@@ -30,7 +30,6 @@ Tools to assist in running an amateur music society.
     * Map to library/rentals.
         * Rehearsal Order.
 
-
 * Performance Database
     * Include templating option for similar concerts***
     * Time, venue, repertoire, rehearsal/performance order, description, "don't forget to bring".
@@ -38,12 +37,6 @@ Tools to assist in running an amateur music society.
     * Positions to player map (optional).
     * Map to rentals/library.
     * Extra players used (costs?)***
-
-
-
-
-
-
 
 * Member Tools
     * Poll for ideal concert dates (given options)
@@ -76,3 +69,12 @@ Tools to assist in running an amateur music society.
         * Costs
         * Room charging to players
         * Room shares
+
+* Ideas
+    * Misc contact management (libraries/external fixers/other related orchestras)
+    * CSV exports of main tables (esp member list and library)
+    * Import/Export to nice format
+
+* TODO:
+    * Figure out django apps list
+    * Can you have subapps? Ie committee/polls. Oh it's namespaces, I literally had to read the next sentence.

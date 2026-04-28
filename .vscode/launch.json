@@ -1,0 +1,39 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Make Migrations",
+        "type": "python",
+        "request": "launch",
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "program": "${workspaceFolder}/orman/manage.py",
+        "args": ["makemigrations", "music"],
+        "cwd": "${workspaceFolder}/orman",
+        "django": true,
+        "justMyCode": true
+      },
+      {
+        "name": "Run Migrations",
+        "type": "python",
+        "request": "launch",
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "program": "${workspaceFolder}/orman/manage.py",
+        "args": ["migrate"],
+        "django": true,
+        "justMyCode": true
+      },
+      {
+        "name": "Runserver",
+        "type": "python",
+        "request": "launch",
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "program": "${workspaceFolder}/orman/manage.py",
+        "args": ["runserver"],
+        "django": true,
+        "justMyCode": true
+      }
+    ]
+  }
