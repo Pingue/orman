@@ -1,108 +1,138 @@
-{% extends "base.html" %} 
-{% block content %} 
-    <script>
-    var csrftoken = '{{ csrf_token }}';
-    function getCell(button) {
-        return button.closest('tr').find('td:first');
+{% extends "base.html" %}
+{% block title %}Instrument Families | Orman{% endblock %}
+{% block content %}
+<script>
+  var csrftoken = '{{ csrf_token }}';
+
+  function getCell(button) {
+    return button.closest('tr').find('td:first');
+  }
+
+  function updateRow(button, isEditMode, value) {
+    var row = getCell(button).parent();
+    var id = row.attr('data-id');
+    var membersLink = (id && id !== '0')
+      ? ' <a href="/admin_instrument_family/' + id + '/members/" class="btn btn-sm btn-secondary">Members</a>'
+      : '';
+    if (isEditMode) {
+      row.html(
+        '<td><input type="text" class="input input-bordered input-sm w-full" ' +
+          'value="' + value + '" data-original-value="' + value + '"></td>' +
+        '<td class="text-right">' +
+          '<a href="#" class="btn btn-sm btn-primary save">Save</a> ' +
+          '<a href="#" class="btn btn-sm btn-error cancel">Cancel</a>' +
+        '</td>'
+      );
+    } else {
+      row.html(
+        '<td>' + value + '</td>' +
+        '<td class="text-right">' +
+          membersLink +
+          ' <a href="#" class="btn btn-sm btn-primary edit">Edit</a> ' +
+          '<a href="#" class="btn btn-sm btn-error del">Delete</a>' +
+        '</td>'
+      );
     }
+    addHandlers();
+  }
 
-    function updateRow(button, isEditMode, value) {
-        console.log(button);
-        var row = getCell(button).parent();
-        if (isEditMode) {
-            row.html('<td><input type="text" value="' + value + '" data-original-value="' + value + '"></td><td><a href="#" class="button is-small is-primary save">Save</a> <a href="#" class="button is-small is-danger cancel">Cancel</a></td>');
-        } else {
-            row.html('<td>'+value+'</td><td><a href="#" class="button is-small is-primary edit">Edit</a> <a href="#" class="button is-small is-danger del">Delete</a></td>')
-        }
-        addHandlers();
-    }
-    function addHandlers() {
-        $('.edit').click(function() {
-            var familyName = getCell($(this)).html();
-            updateRow($(this), true, familyName);
-        });
+  function showError(msg) {
+    $("ul.messages").append(
+      '<li class="alert alert-error">' + msg + '</li>'
+    );
+  }
 
-        $('.del').click(function() {
-            var row = $(this).closest('tr');
-            var familyName = getCell($(this)).html();
-            $.ajax({
-                url: '/admin_instrument_family/' + $(this).parent().parent().attr('data-id'),
-                type: 'DELETE',
-                headers: {'X-CSRFToken': csrftoken},
-                success: function(result) {
-                    row.remove();
-                },
-                error: function(result) {
-                    console.log(result);
-                    $("ul.messages").append('<div class="alert alert-danger">Error deleting family: ' + familyName + ': '+result.responseText+'</div>');
-                }
-            });
-        });
-
-        $(".save").click(function() {
-            var input = getCell($(this)).parent().find('input');
-            var newValue = input.val();
-            var id = $(this).parent().parent().attr('data-id');
-            $.ajax({
-                url: '/admin_instrument_family/' + id,
-                type: 'POST',
-                data: { 'name': newValue },
-                headers: {'X-CSRFToken': csrftoken},
-                success: function(result) {
-                    row = $(`tr[data-id="${id}"]`);
-                    updateRow(row.find("a.save"), false, newValue);
-                },
-                error: function(result) {
-                    $("ul.messages").append('<li class="error">Error deleting family: ' + familyName + ': '+result+'</li>');
-                }
-            });
-        });
-
-        $(".cancel").click(function() {
-            var input = getCell($(this)).find('input');
-            var originalValue = input.attr('data-original-value');
-            updateRow($(this), false, originalValue);
-        });
-    }
-    $(document).ready(function() {
-        $('.button#createNew').click(function() {
-            var table = $('.table');
-            var newRow = $('<tr data-id="0"><td></td><td><button/></td></tr>');
-            table.append(newRow);
-            updateRow(newRow.find('button'), true, 'New Family');
-        });
-
-        addHandlers();
+  function addHandlers() {
+    $('.edit').off('click').on('click', function () {
+      var familyName = getCell($(this)).html();
+      updateRow($(this), true, familyName);
     });
-    </script>
 
-    <h1 class="title is-1">Instrument Families</h1>
-    <div class="container is-centered has-text-right" style="padding-bottom: 20px;">
-        <a href="#" id="createNew" class="button is-primary">Create New</a>
-    </div>
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <strong>Holy guacamole!</strong> You should check in on some of those fields below.
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-    <table class="table is-bordered is-striped is-hoverable" style="width: 100%;">
-        <thead>
-        <tr>
-            <th>Family</th>
-            <th>Actions</th>
+    $('.del').off('click').on('click', function () {
+      var row = $(this).closest('tr');
+      var familyName = getCell($(this)).html();
+      $.ajax({
+        url: '/admin_instrument_family/' + row.attr('data-id'),
+        type: 'DELETE',
+        headers: { 'X-CSRFToken': csrftoken },
+        success: function () { row.remove(); },
+        error: function (result) {
+          showError('Error deleting family ' + familyName + ': ' + result.responseText);
+        }
+      });
+    });
+
+    $('.save').off('click').on('click', function () {
+      var input = getCell($(this)).parent().find('input');
+      var newValue = input.val();
+      var id = $(this).closest('tr').attr('data-id');
+      $.ajax({
+        url: '/admin_instrument_family/' + id,
+        type: 'POST',
+        data: { 'name': newValue },
+        headers: { 'X-CSRFToken': csrftoken },
+        success: function (result) {
+          // result body is the (possibly new) id
+          var newId = (result && result.toString().trim()) || id;
+          var row = $('tr[data-id="' + id + '"]');
+          row.attr('data-id', newId);
+          updateRow(row.find('a.save'), false, newValue);
+        },
+        error: function (result) {
+          showError('Error saving family: ' + result.responseText);
+        }
+      });
+    });
+
+    $('.cancel').off('click').on('click', function () {
+      var input = getCell($(this)).find('input');
+      var originalValue = input.attr('data-original-value');
+      if (input.closest('tr').attr('data-id') === '0') {
+        // Cancelling a brand-new row: just drop it.
+        input.closest('tr').remove();
+      } else {
+        updateRow($(this), false, originalValue);
+      }
+    });
+  }
+
+  $(document).ready(function () {
+    $('#createNew').on('click', function () {
+      var tbody = $('table tbody');
+      var newRow = $('<tr data-id="0"><td></td><td class="text-right"><button/></td></tr>');
+      tbody.append(newRow);
+      updateRow(newRow.find('button'), true, '');
+    });
+
+    addHandlers();
+  });
+</script>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-3xl font-bold">Instrument Families</h1>
+  <a href="#" id="createNew" class="btn btn-primary">Create New</a>
+</div>
+
+<div class="overflow-x-auto">
+  <table class="table table-zebra w-full">
+    <thead>
+      <tr>
+        <th>Family</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for family in families %}
+        <tr data-id="{{ family.id }}">
+          <td>{{ family.name }}</td>
+          <td class="text-right">
+            <a href="{% url 'admin_instrument_family_members' family.id %}" class="btn btn-sm btn-secondary">Members</a>
+            <a href="#" class="btn btn-sm btn-primary edit">Edit</a>
+            <a href="#" class="btn btn-sm btn-error del">Delete</a>
+          </td>
         </tr>
-        </thead>
-        <tbody>
-        {% for family in families %}
-        <tr data-id="{{family.id}}">
-            <td>{{ family.name }}</td>
-            <td>
-            <a href="#" class="button is-small is-primary edit">Edit</a>
-            <a href="#" class="button is-small is-danger del">Delete</a>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    </table>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endblock %}

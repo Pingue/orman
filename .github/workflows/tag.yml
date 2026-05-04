@@ -1,0 +1,33 @@
+name: Tag release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag (e.g. 1.2.3)"
+        required: true
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate semver
+        run: |
+          echo "${{ github.event.inputs.version }}" | \
+            grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || \
+            { echo "Version must be x.y.z"; exit 1; }
+
+      - name: Create and push tag
+        run: |
+          TAG="v${{ github.event.inputs.version }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"

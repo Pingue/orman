@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Polls | Orman{% endblock %}
+{% block content %}
+
+<h1 class="text-3xl font-bold mb-6">Polls</h1>
+
+{% if polls %}
+  <div class="space-y-6 max-w-2xl">
+    {% for poll in polls %}
+      <div class="card bg-base-200 border border-base-content/30">
+        <div class="card-body space-y-4">
+          <h2 class="card-title">{{ poll.title }}</h2>
+          {% if poll.description %}
+            <p class="text-sm whitespace-pre-line">{{ poll.description }}</p>
+          {% endif %}
+
+          {% for q in poll.questions.all %}
+            <div class="border-t border-base-300 pt-4">
+              <p class="font-medium mb-2">{{ q.text }}</p>
+
+              <form method="post" action="{% url 'poll_answer' q.id %}" class="space-y-2">
+                {% csrf_token %}
+
+                {% if q.kind == "free_text" %}
+                  <textarea name="answer" rows="3" required
+                            class="textarea textarea-bordered w-full"
+                            placeholder="Your answer"
+                    >{% for a in q.my_answers %}{{ a.text_value }}{% endfor %}</textarea>
+
+                {% elif q.kind == "single_choice" %}
+                  {% with selected_id=q.my_answers.0.choice_id %}
+                    {% for choice in q.choices.all %}
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="choice" value="{{ choice.id }}"
+                               class="radio radio-sm"
+                               {% if choice.id == selected_id %}checked{% endif %}>
+                        <span>{{ choice.text }}</span>
+                      </label>
+                    {% empty %}
+                      <p class="text-sm opacity-60 italic">No choices defined yet.</p>
+                    {% endfor %}
+                  {% endwith %}
+
+                {% elif q.kind == "multi_choice" %}
+                  {% with selected_ids=q.my_answers|dictsort:"choice_id" %}
+                    {% for choice in q.choices.all %}
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="choices" value="{{ choice.id }}"
+                               class="checkbox checkbox-sm"
+                               {% for a in q.my_answers %}{% if a.choice_id == choice.id %}checked{% endif %}{% endfor %}>
+                        <span>{{ choice.text }}</span>
+                      </label>
+                    {% empty %}
+                      <p class="text-sm opacity-60 italic">No choices defined yet.</p>
+                    {% endfor %}
+                  {% endwith %}
+                {% endif %}
+
+                {% if q.kind != "free_text" and not q.choices.all %}
+                {% else %}
+                  <div class="flex items-center gap-3 pt-1">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                      {% if q.my_answers %}Update{% else %}Submit{% endif %}
+                    </button>
+                    {% if q.my_answers %}
+                      <span class="text-xs opacity-70">
+                        Last updated {{ q.my_answers.0.updatedAt|date:"jS F Y, H:i" }}
+                      </span>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </form>
+            </div>
+          {% empty %}
+            <p class="text-sm opacity-60 italic">No questions yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="opacity-70 italic">No active polls right now.</p>
+{% endif %}
+
+{% endblock %}

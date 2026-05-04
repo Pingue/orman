@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Choices — {{ question }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Poll choices</p>
+    <h1 class="text-3xl font-bold">{{ poll.title }}</h1>
+    <p class="text-sm opacity-70 mt-1">{{ question.text }}</p>
+  </div>
+  <a href="{% url 'admin_poll_questions' poll.id %}" class="btn btn-sm btn-ghost">← Questions</a>
+</div>
+
+<div class="max-w-lg space-y-3" id="choices-list">
+  {% for choice in choices %}
+    <div class="flex items-center gap-2" data-id="{{ choice.id }}">
+      <input type="text" value="{{ choice.text }}"
+             class="input input-bordered flex-1"
+             onchange="saveChoice({{ choice.id }}, this.value)">
+      <button class="btn btn-sm btn-error" onclick="deleteChoice({{ choice.id }}, this)">Delete</button>
+    </div>
+  {% empty %}
+    <p class="opacity-60 italic" id="empty-msg">No choices yet.</p>
+  {% endfor %}
+</div>
+
+<div class="flex gap-2 mt-4 max-w-lg">
+  <input type="text" id="new-choice-text" placeholder="New choice…"
+         class="input input-bordered flex-1"
+         onkeydown="if(event.key==='Enter'){event.preventDefault();addChoice();}">
+  <button class="btn btn-primary" onclick="addChoice()">Add</button>
+</div>
+
+<script>
+  const BASE = "{% url 'admin_poll_choices' poll.id question.id %}";
+
+  function addChoice() {
+    const input = document.getElementById("new-choice-text");
+    const text = input.value.trim();
+    if (!text) return;
+    fetch(BASE + "0", {
+      method: "POST",
+      headers: {"X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/x-www-form-urlencoded"},
+      body: "text=" + encodeURIComponent(text),
+    }).then(r => r.text()).then(id => {
+      document.getElementById("empty-msg")?.remove();
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2";
+      row.dataset.id = id;
+      row.innerHTML = `<input type="text" value="${text}" class="input input-bordered flex-1"
+        onchange="saveChoice(${id}, this.value)">
+        <button class="btn btn-sm btn-error" onclick="deleteChoice(${id}, this)">Delete</button>`;
+      document.getElementById("choices-list").appendChild(row);
+      input.value = "";
+    }).catch(() => alert("Failed to add choice."));
+  }
+
+  function saveChoice(id, text) {
+    fetch(BASE + id, {
+      method: "POST",
+      headers: {"X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/x-www-form-urlencoded"},
+      body: "text=" + encodeURIComponent(text),
+    });
+  }
+
+  function deleteChoice(id, btn) {
+    if (!confirm("Delete this choice?")) return;
+    fetch(BASE + id, {method: "DELETE", headers: {"X-CSRFToken": "{{ csrf_token }}"}})
+      .then(() => {
+        btn.closest("[data-id]").remove();
+        if (!document.querySelector("[data-id]")) {
+          const p = document.createElement("p");
+          p.id = "empty-msg";
+          p.className = "opacity-60 italic";
+          p.textContent = "No choices yet.";
+          document.getElementById("choices-list").appendChild(p);
+        }
+      });
+  }
+</script>
+
+{% endblock %}

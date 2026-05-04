@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -6 92 92">
+  <title>Orman</title>
+  <style>
+    .s { fill: #1a1a1a; }
+    @media (prefers-color-scheme: dark) { .s { fill: #e8e8e8; } }
+  </style>
+  <!-- O ring (donut) -->
+  <path class="s" fill-rule="evenodd" d="
+    M 40 4 C 61 4 78 21 78 42 C 78 63 61 80 40 80
+    C 19 80 2 63 2 42 C 2 21 19 4 40 4 Z
+    M 40 16 C 54 16 66 28 66 42 C 66 56 54 68 40 68
+    C 26 68 14 56 14 42 C 14 28 26 16 40 16 Z
+  "/>
+  <!-- Bass-clef hook (teardrop at upper-right of ring) -->
+  <path class="s" d="M 65 20 C 76 8 80 -2 73 -4 C 66 -6 58 2 62 14 Z"/>
+  <!-- F-clef dots -->
+  <circle class="s" cx="86" cy="26" r="5.5"/>
+  <circle class="s" cx="86" cy="50" r="5.5"/>
+</svg>

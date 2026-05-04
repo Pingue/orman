@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Respondents — {{ choice.text }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Choice respondents</p>
+    <h1 class="text-3xl font-bold">{{ poll.title }}</h1>
+    <p class="text-sm opacity-70 mt-1">{{ choice.question.text }}</p>
+    <p class="font-medium mt-1">{{ choice.text }}</p>
+  </div>
+  <a href="{% url 'admin_poll_responses' poll.id %}" class="btn btn-sm btn-ghost">← Responses</a>
+</div>
+
+{% if respondents %}
+  <p class="text-sm opacity-70 mb-4">{{ respondents|length }} respondent{{ respondents|length|pluralize }}</p>
+  <div class="overflow-x-auto max-w-lg">
+    <table class="table table-zebra w-full">
+      <thead><tr><th>Name</th><th>Answered</th></tr></thead>
+      <tbody>
+        {% for ans in respondents %}
+          <tr>
+            <td>{{ ans.person }}</td>
+            <td class="text-sm opacity-70">{{ ans.updatedAt|date:"j M Y, H:i" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="opacity-70 italic">Nobody has selected this option yet.</p>
+{% endif %}
+
+{% endblock %}

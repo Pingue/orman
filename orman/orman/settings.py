@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,16 +20,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-_bh9(5#$2@0d8-8nx+oqjbj@dg=2b4tw)_tr3ub0g#9wl$6%o@"
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-_bh9(5#$2@0d8-8nx+oqjbj@dg=2b4tw)_tr3ub0g#9wl$6%o@",
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = []
+_allowed = os.environ.get("ALLOWED_HOSTS", "")
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
+# Social login (django-allauth). Set True and configure SOCIALACCOUNT_PROVIDERS to enable.
+SOCIAL_LOGIN_ENABLED = False
 
 # Application definition
+
+AUTH_USER_MODEL = "orman.Person"
 
 INSTALLED_APPS = [
     'django_browser_reload',
@@ -38,18 +45,28 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    #"music",
-    #'tailwind',
+    "django.contrib.sites",
+    'tailwind',
     'theme',
     "orman",
+    # allauth is always installed so its template tags are available;
+    # providers and URL routing are only active when SOCIAL_LOGIN_ENABLED=True.
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    # Uncomment providers as needed:
+    # "allauth.socialaccount.providers.google",
+    # "allauth.socialaccount.providers.github",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_browser_reload.middleware.BrowserReloadMiddleware",
@@ -68,6 +85,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "orman.context_processors.announcements",
+                "orman.context_processors.poll_banners",
+                "orman.context_processors.site_flags",
             ],
         },
     },
@@ -122,6 +142,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
+
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -133,3 +166,30 @@ TAILWIND_APP_NAME = 'theme'
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
+
+# Auth: where to land after login/logout (and where login_required redirects to).
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+
+# Required by django.contrib.sites (used by allauth)
+SITE_ID = 1
+
+# django-allauth configuration (active when SOCIAL_LOGIN_ENABLED = True)
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+]
+if SOCIAL_LOGIN_ENABLED:
+    AUTHENTICATION_BACKENDS += ["allauth.account.auth_backends.AuthenticationBackend"]
+
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+
+# Provider credentials go in environment-specific settings, e.g.:
+# SOCIALACCOUNT_PROVIDERS = {
+#     "google": {
+#         "APP": {"client_id": "...", "secret": "...", "key": ""},
+#         "SCOPE": ["profile", "email"],
+#     }
+# }

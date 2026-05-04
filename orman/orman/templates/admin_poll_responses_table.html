@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Response table — {{ poll.title }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">All responses — table view</p>
+    <h1 class="text-3xl font-bold">{{ poll.title }}</h1>
+  </div>
+  <a href="{% url 'admin_poll_responses' poll.id %}" class="btn btn-sm btn-ghost">← Summary</a>
+</div>
+
+{% if rows %}
+  <p class="text-sm opacity-70 mb-4">{{ rows|length }} respondent{{ rows|length|pluralize }}</p>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>Person</th>
+          {% for q in questions %}
+            <th class="text-sm">{{ q.text }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="font-medium whitespace-nowrap">{{ row.person }}</td>
+            {% for answer in row.answers %}
+              <td class="text-sm whitespace-pre-line">{{ answer }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="opacity-70 italic">No responses yet.</p>
+{% endif %}
+
+{% endblock %}

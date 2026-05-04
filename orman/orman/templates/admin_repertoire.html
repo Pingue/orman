@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Repertoire — {{ event }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <p class="text-xs uppercase opacity-60">Repertoire editor</p>
+    <h1 class="text-3xl font-bold">{{ event }}</h1>
+  </div>
+  <a href="{% url back_url %}" class="btn btn-sm btn-ghost">← Back</a>
+</div>
+
+<p class="text-sm opacity-60 mb-4 max-w-xl">
+  Drag rows to reorder. <strong>Start time</strong> is optional — enter it if you know when a piece begins
+  in the rehearsal/performance (e.g. 19:30). Duration is read from the music library.
+</p>
+
+<!-- SortableJS (MIT) via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+<div class="max-w-2xl space-y-1" id="items-list">
+  {% for item in items %}
+    <div class="flex items-center gap-2 px-2 py-1 bg-base-200 border border-base-content/30 rounded cursor-grab active:cursor-grabbing" data-id="{{ item.id }}">
+      <span class="opacity-25 select-none drag-handle text-base leading-none" title="Drag to reorder">⠿</span>
+      <span class="flex-1 min-w-0 text-sm truncate">
+        {{ item.musicItem }}{% if item.musicItem.duration %}<span class="opacity-40 ml-2 text-xs">{{ item.musicItem.duration }}</span>{% endif %}
+      </span>
+      <input type="time" value="{% if item.start_time %}{{ item.start_time|time:'H:i' }}{% endif %}"
+             class="input input-bordered input-xs w-28 text-xs"
+             title="Start time"
+             onchange="saveStartTime({{ item.id }}, this.value)">
+      <button class="btn btn-xs btn-ghost text-error px-1" onclick="deleteItem({{ item.id }}, this)">
+        <i class="fas fa-trash text-xs"></i>
+      </button>
+    </div>
+  {% empty %}
+    <p class="opacity-60 italic" id="empty-msg">No music yet.</p>
+  {% endfor %}
+</div>
+
+<!-- Add piece -->
+<div class="flex gap-2 mt-6 max-w-2xl flex-wrap items-end">
+  <div class="flex-1 min-w-[12rem]">
+    <label class="label label-text text-xs">Piece</label>
+    <select id="new-music-id" class="select select-bordered select-sm w-full">
+      <option value="">— select a piece —</option>
+      {% for m in all_music %}
+        <option value="{{ m.id }}" data-duration="{{ m.duration|default:'' }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="label label-text text-xs">Start time (optional)</label>
+    <input type="time" id="new-start-time" class="input input-bordered input-sm w-32">
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="addItem()">
+    <i class="fas fa-plus mr-1"></i>Add
+  </button>
+</div>
+
+<script>
+  const BASE = "{{ request.path }}";
+  const CSRF = "{{ csrf_token }}";
+
+  // ── Drag-and-drop reorder via SortableJS ──────────────────────────────────
+  const list = document.getElementById("items-list");
+  let sortable = null;
+  if (list) {
+    sortable = Sortable.create(list, {
+      handle: ".drag-handle",
+      animation: 150,
+      ghostClass: "opacity-40",
+      onEnd() {
+        const ids = [...list.querySelectorAll("[data-id]")].map(el => el.dataset.id);
+        const params = ids.map(id => "order[]=" + encodeURIComponent(id)).join("&");
+        fetch(BASE + "?action=reorder", {
+          method: "POST",
+          headers: {"X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded"},
+          body: params,
+        });
+      },
+    });
+  }
+
+  // ── Start time update ─────────────────────────────────────────────────────
+  function saveStartTime(id, value) {
+    fetch(BASE + id, {
+      method: "POST",
+      headers: {"X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded"},
+      body: "start_time=" + encodeURIComponent(value),
+    }).catch(() => alert("Failed to save start time."));
+  }
+
+  // ── Add piece ─────────────────────────────────────────────────────────────
+  function addItem() {
+    const musicId   = document.getElementById("new-music-id").value;
+    const startTime = document.getElementById("new-start-time").value;
+    if (!musicId) return;
+
+    fetch(BASE + "0", {
+      method: "POST",
+      headers: {"X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded"},
+      body: "music_item_id=" + encodeURIComponent(musicId) +
+            "&start_time="  + encodeURIComponent(startTime),
+    })
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(data => {
+      document.getElementById("empty-msg")?.remove();
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2 px-2 py-1 bg-base-200 border border-base-content/30 rounded cursor-grab active:cursor-grabbing";
+      row.dataset.id = data.id;
+      const durHtml = data.duration
+        ? `<span class="opacity-40 ml-2 text-xs">${data.duration}</span>` : "";
+      row.innerHTML = `
+        <span class="opacity-25 select-none drag-handle text-base leading-none" title="Drag to reorder">⠿</span>
+        <span class="flex-1 min-w-0 text-sm truncate">${data.title}${durHtml}</span>
+        <input type="time" value="${data.start_time}" class="input input-bordered input-xs w-28 text-xs"
+               title="Start time"
+               onchange="saveStartTime(${data.id}, this.value)">
+        <button class="btn btn-xs btn-ghost text-error px-1" onclick="deleteItem(${data.id}, this)">
+          <i class="fas fa-trash text-xs"></i>
+        </button>`;
+      list.appendChild(row);
+      // Reinit sortable so new row is draggable
+      if (sortable) sortable.el; // already watching mutations
+
+      document.getElementById("new-music-id").value = "";
+      document.getElementById("new-start-time").value = "";
+    })
+    .catch(() => alert("Failed to add item."));
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  function deleteItem(id, btn) {
+    if (!confirm("Remove this piece from the repertoire?")) return;
+    fetch(BASE + id, {method: "DELETE", headers: {"X-CSRFToken": CSRF}})
+      .then(() => {
+        btn.closest("[data-id]").remove();
+        if (!document.querySelector("[data-id]")) {
+          const p = document.createElement("p");
+          p.id = "empty-msg";
+          p.className = "opacity-60 italic";
+          p.textContent = "No music yet.";
+          list.appendChild(p);
+        }
+      });
+  }
+</script>
+
+{% endblock %}

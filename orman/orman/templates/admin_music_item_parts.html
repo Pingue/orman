@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Parts — {{ music_item }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <p class="text-xs uppercase opacity-60">Parts editor</p>
+    <h1 class="text-3xl font-bold">{{ music_item }}</h1>
+    {% if music_item.composer %}<p class="text-sm opacity-70 mt-1">{{ music_item.composer }}</p>{% endif %}
+  </div>
+  <a href="{% url 'admin_music_item' %}" class="btn btn-sm btn-ghost">← Music</a>
+</div>
+
+<div class="alert alert-info text-sm mb-6 max-w-2xl">
+  <i class="fas fa-info-circle"></i>
+  <div>
+    One part per instrument — upload a file <em>or</em> add an external link.
+    Allowed file types: {{ allowed_extensions }}.
+  </div>
+</div>
+
+<!-- Existing parts -->
+<div class="max-w-2xl space-y-2" id="parts-list">
+  {% for part in parts %}
+    <div class="card bg-base-200 border border-base-content/30" data-id="{{ part.id }}">
+      <div class="card-body p-3 gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="font-semibold w-44 truncate" title="{{ part.instrument }}">{{ part.instrument }}</span>
+
+          <div class="flex-1 min-w-0 text-sm">
+            {% if part.file %}
+              <span class="opacity-70 truncate block" id="fname-{{ part.id }}">
+                <i class="fas fa-file mr-1"></i>{{ part.file.name|cut:"parts/" }}
+              </span>
+            {% elif part.external_link %}
+              <a href="{{ part.external_link }}" target="_blank" rel="noopener noreferrer"
+                 class="link link-primary truncate block" id="fname-{{ part.id }}">
+                <i class="fas fa-external-link-alt mr-1"></i>{{ part.external_link }}
+              </a>
+            {% else %}
+              <span class="opacity-40 italic" id="fname-{{ part.id }}">No file or link yet</span>
+            {% endif %}
+          </div>
+
+          <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit({{ part.id }}, this)" title="Edit file/link">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn btn-xs btn-error" onclick="deletePart({{ part.id }}, this)" title="Remove part">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+
+        <!-- Inline edit panel (hidden by default) -->
+        <div class="hidden pt-2 border-t border-base-300 space-y-2" id="edit-{{ part.id }}">
+          <div class="flex gap-2 items-center flex-wrap">
+            <label class="text-xs font-medium w-28">Replace file:</label>
+            <input type="file" accept="{{ allowed_extensions }}"
+                   class="file-input file-input-bordered file-input-sm flex-1"
+                   id="file-input-{{ part.id }}">
+          </div>
+          <div class="flex gap-2 items-center flex-wrap">
+            <label class="text-xs font-medium w-28">Or external link:</label>
+            <input type="url" placeholder="https://…"
+                   value="{{ part.external_link }}"
+                   class="input input-bordered input-sm flex-1"
+                   id="link-input-{{ part.id }}">
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-primary" onclick="savePartFile({{ part.id }}, this)">Save</button>
+            {% if part.file %}
+              <button class="btn btn-sm btn-ghost text-error" onclick="clearFile({{ part.id }}, this)">
+                Clear uploaded file
+              </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="opacity-60 italic" id="empty-msg">No parts defined yet.</p>
+  {% endfor %}
+</div>
+
+<!-- Add new part form -->
+<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+  <div class="card-body p-4 gap-3">
+    <h2 class="card-title text-base">Add part</h2>
+    <div>
+      <label class="label label-text text-xs">Instrument</label>
+      <select id="new-instrument-id" class="select select-bordered select-sm w-56">
+        <option value="">— select instrument —</option>
+        {% for inst in instruments %}
+          <option value="{{ inst.id }}">{{ inst }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex gap-2 items-end flex-wrap">
+      <div class="flex-1 min-w-[12rem]">
+        <label class="label label-text text-xs">Upload file ({{ allowed_extensions }})</label>
+        <input type="file" id="new-file" accept="{{ allowed_extensions }}"
+               class="file-input file-input-bordered file-input-sm w-full">
+      </div>
+      <div class="flex items-end gap-1 opacity-50 text-sm py-2">or</div>
+      <div class="flex-1 min-w-[12rem]">
+        <label class="label label-text text-xs">External link URL</label>
+        <input type="url" id="new-link" placeholder="https://…"
+               class="input input-bordered input-sm w-full">
+      </div>
+    </div>
+    <div>
+      <button class="btn btn-primary btn-sm" onclick="addPart()">
+        <i class="fas fa-plus mr-1"></i>Add part
+      </button>
+      <span id="add-error" class="text-error text-sm ml-3 hidden"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const BASE = "{% url 'admin_music_item_parts' music_item.id %}";
+  const CSRF = "{{ csrf_token }}";
+
+  /** Mirror of forms.normalise_url — prepend https:// when no scheme given. */
+  function normaliseUrl(v) {
+    v = (v || "").trim();
+    if (v && !/^https?:\/\//i.test(v) && !/^ftp:\/\//i.test(v)) v = "https://" + v;
+    return v;
+  }
+
+  function toggleEdit(id) {
+    document.getElementById("edit-" + id).classList.toggle("hidden");
+  }
+
+  function savePartFile(id, btn) {
+    const fileInput = document.getElementById("file-input-" + id);
+    const linkInput = document.getElementById("link-input-" + id);
+    const normLink  = normaliseUrl(linkInput.value);
+    linkInput.value = normLink;          // show normalised value back to the user
+    const fd = new FormData();
+    fd.append("external_link", normLink);
+    if (fileInput.files.length) fd.append("file", fileInput.files[0]);
+    btn.disabled = true; btn.textContent = "Saving…";
+    fetch(BASE + id, {method: "POST", headers: {"X-CSRFToken": CSRF}, body: fd})
+      .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(t); }); })
+      .then(() => {
+        const fnameEl = document.getElementById("fname-" + id);
+        if (fileInput.files.length) {
+          fnameEl.outerHTML = `<span class="opacity-70 truncate block" id="fname-${id}"><i class="fas fa-file mr-1"></i>${fileInput.files[0].name}</span>`;
+        } else if (normLink) {
+          fnameEl.outerHTML = `<a href="${normLink}" target="_blank" rel="noopener noreferrer" class="link link-primary truncate block" id="fname-${id}"><i class="fas fa-external-link-alt mr-1"></i>${normLink}</a>`;
+        }
+        document.getElementById("edit-" + id).classList.add("hidden");
+      })
+      .catch(e => alert("Failed to save: " + e.message))
+      .finally(() => { btn.disabled = false; btn.textContent = "Save"; });
+  }
+
+  function clearFile(id, btn) {
+    if (!confirm("Remove the uploaded file from this part?")) return;
+    const fd = new FormData(); fd.append("clear_file", "1");
+    fetch(BASE + id, {method: "POST", headers: {"X-CSRFToken": CSRF}, body: fd})
+      .then(r => { if (!r.ok) throw new Error(); })
+      .then(() => {
+        const fnameEl = document.getElementById("fname-" + id);
+        fnameEl.outerHTML = `<span class="opacity-40 italic" id="fname-${id}">No file or link yet</span>`;
+        btn.remove();
+      })
+      .catch(() => alert("Failed to clear file."));
+  }
+
+  function deletePart(id, btn) {
+    if (!confirm("Remove this part?")) return;
+    fetch(BASE + id, {method: "DELETE", headers: {"X-CSRFToken": CSRF}})
+      .then(() => {
+        btn.closest("[data-id]").remove();
+        if (!document.querySelector("[data-id]")) {
+          const p = document.createElement("p");
+          p.id = "empty-msg"; p.className = "opacity-60 italic"; p.textContent = "No parts defined yet.";
+          document.getElementById("parts-list").appendChild(p);
+        }
+      });
+  }
+
+  function addPart() {
+    const instrumentId = document.getElementById("new-instrument-id").value;
+    const fileInput    = document.getElementById("new-file");
+    const linkInput    = document.getElementById("new-link");
+    const errEl        = document.getElementById("add-error");
+    if (!instrumentId) { showError("Please select an instrument."); return; }
+    if (!fileInput.files.length && !linkInput.value.trim()) {
+      showError("Please upload a file or provide a link."); return;
+    }
+    errEl.classList.add("hidden");
+    const fd = new FormData();
+    fd.append("instrument_id", instrumentId);
+    fd.append("external_link", normaliseUrl(linkInput.value));  // normalise before sending
+    if (fileInput.files.length) fd.append("file", fileInput.files[0]);
+    fetch(BASE + "0", {method: "POST", headers: {"X-CSRFToken": CSRF}, body: fd})
+      .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(t); }); return r.json(); })
+      .then(data => {
+        document.getElementById("empty-msg")?.remove();
+        const label    = document.getElementById("new-instrument-id").selectedOptions[0].text;
+        const normLink = data.external_link;   // server-normalised value
+        let fileDisplay;
+        if (data.file_name) {
+          fileDisplay = `<span class="opacity-70 truncate block" id="fname-${data.id}"><i class="fas fa-file mr-1"></i>${data.file_name}</span>`;
+        } else if (normLink) {
+          fileDisplay = `<a href="${normLink}" target="_blank" rel="noopener noreferrer" class="link link-primary truncate block" id="fname-${data.id}"><i class="fas fa-external-link-alt mr-1"></i>${normLink}</a>`;
+        } else {
+          fileDisplay = `<span class="opacity-40 italic" id="fname-${data.id}">No file or link yet</span>`;
+        }
+        const card = document.createElement("div");
+        card.className = "card bg-base-200 border border-base-content/30"; card.dataset.id = data.id;
+        card.innerHTML = `
+          <div class="card-body p-3 gap-2">
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="font-semibold w-44 truncate">${label}</span>
+              <div class="flex-1 min-w-0 text-sm">${fileDisplay}</div>
+              <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit(${data.id})" title="Edit file/link"><i class="fas fa-pen"></i></button>
+              <button class="btn btn-xs btn-error" onclick="deletePart(${data.id}, this)" title="Remove part"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="hidden pt-2 border-t border-base-300 space-y-2" id="edit-${data.id}">
+              <div class="flex gap-2 items-center flex-wrap">
+                <label class="text-xs font-medium w-28">Replace file:</label>
+                <input type="file" accept="{{ allowed_extensions }}" class="file-input file-input-bordered file-input-sm flex-1" id="file-input-${data.id}">
+              </div>
+              <div class="flex gap-2 items-center flex-wrap">
+                <label class="text-xs font-medium w-28">Or external link:</label>
+                <input type="url" placeholder="https://…" value="${normLink}" class="input input-bordered input-sm flex-1" id="link-input-${data.id}">
+              </div>
+              <div class="flex gap-2">
+                <button class="btn btn-sm btn-primary" onclick="savePartFile(${data.id}, this)">Save</button>
+              </div>
+            </div>
+          </div>`;
+        document.getElementById("parts-list").appendChild(card);
+        document.getElementById("new-instrument-id").value = "";
+        fileInput.value = ""; linkInput.value = "";
+      })
+      .catch(e => showError(e.message || "Failed to add part."));
+  }
+
+  function showError(msg) {
+    const e = document.getElementById("add-error");
+    e.textContent = msg; e.classList.remove("hidden");
+  }
+</script>
+
+{% endblock %}

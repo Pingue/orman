@@ -1,55 +1,188 @@
+{% load static tailwind_tags %}
+<!doctype html>
+<html lang="en">
 <head>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Orman{% endblock %}</title>
+  <!-- Tell Dark Reader (and any similar extension) that this site handles its
+       own light/dark switching — no external transformation needed. -->
+  <meta name="color-scheme" content="light dark">
+  <meta name="darkreader-lock">
+  <link rel="icon" type="image/svg+xml" href="{% static 'orman-icon.svg' %}">
+  {% tailwind_css %}
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <!-- Theme bootstrap: runs before <body> renders to avoid a flash of the wrong theme.
+       Stored choice is "light" / "dark" / null (= follow system). -->
+  <script>
+    (function () {
+      var stored = localStorage.getItem('orman-theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var mode = stored || (prefersDark ? 'dark' : 'light');
+      var html = document.documentElement;
+      html.setAttribute('data-theme', mode === 'dark' ? 'night' : 'cupcake');
+      html.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    })();
+  </script>
 </head>
-<body>
-  <div class="navbar-start">
-    <div class="dropdown is-hoverable">
-      <div class="dropdown-trigger">
-        <button class="button" aria-haspopup="true" aria-controls="dropdown-menu">
-          <span class="icon is-small">
-            <i class="fas fa-bars" aria-hidden="true"></i>
-          </span>
-        </button>
-      </div>
-      <div class="dropdown-menu" id="dropdown-menu" role="menu">
-        <div class="dropdown-content">
-          <a href="{% url 'index' %}" class="dropdown-item">Home</a>
-          <a href="#" class="dropdown-item">My Profile</a>
-          <a href="#" class="dropdown-item">Events</a>
-          <a href="#" class="dropdown-item">Music</a>
-        </div>
-      </div>
+<body class="min-h-screen bg-base-100 text-base-content">
+
+  <div class="navbar bg-base-200 shadow-md">
+    <div class="navbar-start">
+      <details class="dropdown">
+        <summary class="btn btn-ghost"><i class="fas fa-bars"></i></summary>
+        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+          <li><a href="{% url 'index' %}">Home</a></li>
+          <li><a href="{% url 'profile' %}">My profile</a></li>
+          <li><a href="{% url 'events' %}">Events</a></li>
+          <li><a href="{% url 'music' %}">Music</a></li>
+          <li><a href="{% url 'polls' %}">Polls</a></li>
+        </ul>
+      </details>
+      <a href="{% url 'index' %}" class="btn btn-ghost normal-case pl-2 pr-3">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -6 248 88" height="28"
+             fill="currentColor" aria-label="Orman" role="img">
+          <title>Orman</title>
+          <!-- O: ring (donut) with bass-clef hook + F-clef dots -->
+          <path fill-rule="evenodd" d="
+            M 40 4 C 61 4 78 21 78 42 C 78 63 61 80 40 80
+            C 19 80 2 63 2 42 C 2 21 19 4 40 4 Z
+            M 40 16 C 54 16 66 28 66 42 C 66 56 54 68 40 68
+            C 26 68 14 56 14 42 C 14 28 26 16 40 16 Z
+          "/>
+          <!-- Bass-clef hook: teardrop scroll at upper-right -->
+          <path d="M 65 20 C 76 8 80 -2 73 -4 C 66 -6 58 2 62 14 Z"/>
+          <!-- F-clef dots -->
+          <circle cx="86" cy="26" r="5.5"/>
+          <circle cx="86" cy="50" r="5.5"/>
+          <!-- rman in classical serif -->
+          <text x="100" y="60"
+                font-family="'Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif"
+                font-size="56">rman</text>
+        </svg>
+      </a>
     </div>
-    <div class="navbar-item has-text-centered">
-      <span class="title is-4">Orman</span>
+
+    <div class="navbar-end gap-2">
+      {% if user.is_authenticated %}
+        <span class="text-sm opacity-70 hidden md:inline">{{ user.firstNames }}</span>
+      {% endif %}
+
+      <!-- Theme switcher -->
+      <details class="dropdown dropdown-end" id="themeMenu">
+        <summary class="btn btn-ghost btn-sm" aria-label="Theme">
+          <i class="fas fa-palette"></i>
+        </summary>
+        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-44">
+          <li><a href="#" data-theme-set="light"><i class="fas fa-sun w-4"></i> Light</a></li>
+          <li><a href="#" data-theme-set="dark"><i class="fas fa-moon w-4"></i> Dark</a></li>
+          <li><a href="#" data-theme-set="system"><i class="fas fa-desktop w-4"></i> System</a></li>
+        </ul>
+      </details>
+
+      {% if user.is_admin %}
+      <details class="dropdown dropdown-end">
+        <summary class="btn btn-ghost">Admin</summary>
+        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+          <li><a href="{% url 'admin_person' %}">People</a></li>
+          <li><a href="{% url 'admin_instrument' %}">Instruments</a></li>
+          <li><a href="{% url 'admin_instrument_family' %}">Instrument Families</a></li>
+          <li><a href="{% url 'admin_venue' %}">Venues</a></li>
+          <li><a href="{% url 'admin_music_item' %}">Music</a></li>
+          <li><a href="{% url 'admin_rental_contract' %}">Rentals</a></li>
+          <li><a href="{% url 'admin_rehearsal_series' %}">Rehearsal Series</a></li>
+          <li><a href="{% url 'admin_rehearsal' %}">Rehearsals</a></li>
+          <li><a href="{% url 'admin_performance' %}">Performances</a></li>
+          <li><a href="{% url 'admin_announcement' %}">Announcements</a></li>
+          <li><a href="{% url 'admin_poll' %}">Polls</a></li>
+          <li><a href="{% url 'admin_mailing_list' %}">Mailing Lists</a></li>
+          <li><a href="{% url 'admin_social_apps' %}">Social Auth</a></li>
+        </ul>
+      </details>
+      {% endif %}
+
+      {% if user.is_authenticated %}
+        <form method="post" action="{% url 'logout' %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
+        </form>
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-ghost btn-sm">Sign in</a>
+      {% endif %}
     </div>
-    <div class="navbar-end">
-      <div class="dropdown is-hoverable">
-        <div class="dropdown-trigger">
-          <button class="button" aria-haspopup="true" aria-controls="dropdown-menu2">
-            <span>Admin</span>
-          </button>
-        </div>
-        <div class="dropdown-menu" id="dropdown-menu2" role="menu">
-          <div class="dropdown-content">
-            <a href="#" class="dropdown-item">People</a>
-            <a href="#" class="dropdown-item">Instruments</a>
-            <a href="{% url 'admin_instrument_family' %}" class="dropdown-item">Instrument Families</a>
-            <a href="#" class="dropdown-item">Events</a>
-            <a href="#" class="dropdown-item">Music</a>
+  </div>
+
+  {% if announcements or poll_banners %}
+    <div class="container mx-auto px-4 pt-4 max-w-5xl space-y-2">
+      {% for a in announcements %}
+        <div class="alert alert-{{ a.severity }}" role="alert">
+          <div class="flex-1">
+            {% if a.title %}<strong class="mr-2">{{ a.title }}</strong>{% endif %}
+            <span>{{ a.body|linebreaksbr }}</span>
           </div>
+          {% if a.dismissible %}
+            <button type="button" class="btn btn-ghost btn-xs"
+                    onclick="this.closest('.alert').remove(); fetch('{% url 'dismiss_announcement' a.id %}', {method:'POST', headers:{'X-CSRFToken':'{{ csrf_token }}'}})"
+                    aria-label="Dismiss">
+              <i class="fas fa-times"></i>
+            </button>
+          {% endif %}
         </div>
-      </div>
+      {% endfor %}
+      {% for poll in poll_banners %}
+        <div class="alert alert-info" role="alert">
+          <div class="flex-1">
+            <strong class="mr-2">Poll:</strong>
+            <span>{{ poll.title }}</span>
+            {% if poll.description %}<span class="opacity-70 ml-2 text-sm">— {{ poll.description }}</span>{% endif %}
+          </div>
+          <a href="{% url 'polls' %}" class="btn btn-sm btn-primary ml-2">Answer</a>
+        </div>
+      {% endfor %}
     </div>
-  </div>
-  <div class="container is-centered" style="width: 70%;">
-  <ul class="messages">
-  {% for message in messages %}
-  <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
-  {% endfor %}
-  </ul>
-  {% block content %}{% endblock %}
-  </div>
+  {% endif %}
+
+  <main class="container mx-auto px-4 py-6 max-w-5xl">
+    <ul class="messages space-y-2 mb-4">
+      {% for message in messages %}
+        <li class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Theme switcher click handlers + react to OS theme change while in 'system' mode -->
+  <script>
+    (function () {
+      function applyTheme(mode) {
+        var html = document.documentElement;
+        html.setAttribute('data-theme', mode === 'dark' ? 'night' : 'cupcake');
+        html.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+      }
+      document.querySelectorAll('[data-theme-set]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          e.preventDefault();
+          var choice = this.getAttribute('data-theme-set');
+          if (choice === 'system') {
+            localStorage.removeItem('orman-theme');
+            applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          } else {
+            localStorage.setItem('orman-theme', choice);
+            applyTheme(choice);
+          }
+          // Close the dropdown.
+          var menu = document.getElementById('themeMenu');
+          if (menu) menu.removeAttribute('open');
+        });
+      });
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+        if (!localStorage.getItem('orman-theme')) {
+          applyTheme(e.matches ? 'dark' : 'light');
+        }
+      });
+    })();
+  </script>
 </body>
+</html>

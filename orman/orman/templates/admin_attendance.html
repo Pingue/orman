@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Attendance — {{ event }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Attendance breakdown</p>
+    <h1 class="text-3xl font-bold">{{ event }}</h1>
+    <p class="text-sm opacity-70 mt-1">{{ event_date }}</p>
+  </div>
+  <a href="{% url back_url %}" class="btn btn-sm btn-ghost">← Back</a>
+</div>
+
+{% if rows %}
+  <p class="text-sm opacity-70 mb-4">
+    {{ total_going }} going{% if total_maybe %}, {{ total_maybe }} maybe{% endif %}
+  </p>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full max-w-3xl">
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>Going</th>
+          <th>Maybe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="font-medium align-top">
+              {% if row.instrument %}{{ row.instrument }}{% else %}<span class="opacity-50 italic">No instrument</span>{% endif %}
+            </td>
+            <td class="align-top">
+              {% if row.going %}
+                <span class="font-semibold">{{ row.going|length }}</span>
+                <span class="text-sm opacity-70 ml-1">
+                  ({% for p in row.going %}{{ p }}{% if not forloop.last %}, {% endif %}{% endfor %})
+                </span>
+              {% else %}
+                <span class="opacity-30">—</span>
+              {% endif %}
+            </td>
+            <td class="align-top">
+              {% if row.maybe %}
+                <span class="font-semibold opacity-60">{{ row.maybe|length }}</span>
+                <span class="text-sm opacity-50 ml-1">
+                  ({% for p in row.maybe %}{{ p }}{% if not forloop.last %}, {% endif %}{% endfor %})
+                </span>
+              {% else %}
+                <span class="opacity-30">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="opacity-70 italic">No RSVPs yet.</p>
+{% endif %}
+
+{% endblock %}

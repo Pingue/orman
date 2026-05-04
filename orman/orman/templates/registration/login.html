@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Sign in | Orman{% endblock %}
+{% block content %}
+
+<div class="card bg-base-200 border border-base-content/30 max-w-md mx-auto">
+  <div class="card-body">
+    <h2 class="card-title">Sign in</h2>
+
+    {% if form.errors %}
+      <div class="alert alert-error text-sm">
+        Your email and password didn't match. Please try again.
+      </div>
+    {% endif %}
+
+    {% if next %}
+      {% if user.is_authenticated %}
+        <div class="alert alert-warning text-sm">
+          Your account doesn't have access to that page. Sign in as a different user?
+        </div>
+      {% endif %}
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}" class="space-y-3">
+      {% csrf_token %}
+
+      <div class="form-control">
+        <label class="label" for="id_username"><span class="label-text">Email</span></label>
+        <input type="email" name="username" id="id_username" autofocus required
+               class="input input-bordered w-full">
+      </div>
+
+      <div class="form-control">
+        <label class="label" for="id_password"><span class="label-text">Password</span></label>
+        <input type="password" name="password" id="id_password" required
+               class="input input-bordered w-full">
+      </div>
+
+      <input type="hidden" name="next" value="{{ next }}">
+
+      <div class="card-actions justify-end pt-2">
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </div>
+    </form>
+
+    {% if SOCIAL_LOGIN_ENABLED %}
+      <div class="divider text-xs opacity-60">or</div>
+      <div class="space-y-2">
+        {% load socialaccount %}
+        {% get_providers as socialaccount_providers %}
+        {% for provider in socialaccount_providers %}
+          <a href="{% provider_login_url provider.id process='login' next=next %}"
+             class="btn btn-outline w-full">
+            Continue with {{ provider.name }}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

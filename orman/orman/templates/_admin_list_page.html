@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load orman_extras %}
+{# Generic admin list page. Pages set:
+   page_title       - heading text + browser title
+   columns          - list of dicts {label, field}
+   rows             - iterable of model instances
+   list_url_name    - URL name for the list page
+   form_url_name    - URL name for the form fragment endpoint, takes <id>
+   save_url_name    - URL name for save (no id = create, with id = update)
+   delete_url_name  - URL name for delete, takes <id>
+   open_modal       - bool, whether to auto-open modal on load (after error)
+   edit_id          - id to edit when open_modal is True (0 for new)
+   form             - the unbound ModelForm (used to render initial modal) #}
+{% block title %}{{ page_title }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-3xl font-bold">{{ page_title }}</h1>
+  <button class="btn btn-primary" onclick="openCrudModal(0)">Create New</button>
+</div>
+
+{% if page_notice %}
+  <div class="alert alert-warning mb-4 text-sm">{{ page_notice }}</div>
+{% endif %}
+
+<div class="overflow-x-auto">
+  <table class="table table-zebra w-full">
+    <thead>
+      <tr>
+        {% for col in columns %}<th>{{ col.label }}</th>{% endfor %}
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr data-id="{{ row.id }}">
+          {% for col in columns %}
+            <td>{{ row|crud_value:col.field }}</td>
+          {% endfor %}
+          <td class="text-right whitespace-nowrap">
+            {% for action in row_extra_actions %}
+              <a href="{% url action.url_name row.id %}" class="btn btn-sm btn-secondary">{{ action.label }}</a>
+            {% endfor %}
+            <button class="btn btn-sm btn-primary" onclick="openCrudModal({{ row.id }})">Edit</button>
+            <form method="post"
+                  action="{% url delete_url_name row.id %}"
+                  class="inline"
+                  onsubmit="return confirm('Delete this {{ singular|lower }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-error">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="{{ columns|length|add:1 }}" class="text-center opacity-60">
+            No records yet.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<dialog id="crud_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg mb-4" id="crud_modal_title">{{ singular }}</h3>
+    <div id="crud_modal_body">
+      {% include "_modal_form.html" %}
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+  // form_url_name resolves to a URL like /admin_x/<id>/form/, with 0 = new.
+  // Save endpoint: same URL with the id but no /form/ suffix.
+  function buildFormUrl(id) {
+    return "{% url form_url_name 0 %}".replace("/0/form", "/" + id + "/form");
+  }
+  function buildSaveUrl(id) {
+    if (id === 0) {
+      return "{% url save_url_name %}";
+    }
+    return "{% url save_url_name 0 %}".replace(/\/0\/?$/, "/" + id + "/");
+  }
+
+  function openCrudModal(id) {
+    var url = buildFormUrl(id);
+    fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then(function (resp) { return resp.text(); })
+      .then(function (html) {
+        var body = document.getElementById('crud_modal_body');
+        body.innerHTML = html;
+        var form = body.querySelector('form');
+        form.action = buildSaveUrl(id);
+        document.getElementById('crud_modal_title').textContent =
+          (id === 0 ? "New " : "Edit ") + "{{ singular }}";
+        document.getElementById('crud_modal').showModal();
+        if (typeof modalInitHook === 'function') { modalInitHook(); }
+      })
+      .catch(function (err) {
+        alert("Failed to load form: " + err);
+      });
+  }
+
+  {% if open_modal %}
+    // Re-open modal on validation error (server-rendered).
+    document.addEventListener("DOMContentLoaded", function () {
+      var form = document.querySelector('#crud_modal_body form');
+      if (form) {
+        form.action = buildSaveUrl({{ edit_id }});
+      }
+      document.getElementById('crud_modal_title').textContent =
+        ({{ edit_id }} === 0 ? "New " : "Edit ") + "{{ singular }}";
+      document.getElementById('crud_modal').showModal();
+      if (typeof modalInitHook === 'function') { modalInitHook(); }
+    });
+  {% endif %}
+
+  {% if modal_init_js %}{{ modal_init_js }}{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Members — {{ heading }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Members</p>
+    <h1 class="text-3xl font-bold">{{ heading }}</h1>
+  </div>
+  <a href="{{ back_url }}" class="btn btn-sm btn-ghost">← Back</a>
+</div>
+
+{% if rows %}
+  <p class="text-sm opacity-70 mb-4">{{ rows|length }} member{{ rows|length|pluralize }}</p>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra w-full max-w-2xl">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Instruments</th>
+          <th>Member</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="font-medium whitespace-nowrap">
+              {{ row.person }}
+            </td>
+            <td class="text-sm opacity-80">
+              {{ row.instruments|join:", " }}
+            </td>
+            <td>
+              {% if row.person.member %}
+                <span class="badge badge-success badge-sm">Yes</span>
+              {% else %}
+                <span class="badge badge-ghost badge-sm">No</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="opacity-70 italic">No members play this instrument.</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Questions — {{ poll.title }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Poll questions</p>
+    <h1 class="text-3xl font-bold">{{ poll.title }}</h1>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'admin_poll' %}" class="btn btn-sm btn-ghost">← All polls</a>
+    <button class="btn btn-sm btn-primary" onclick="openQuestionModal(0)">Add question</button>
+  </div>
+</div>
+
+{% if poll.description %}
+  <p class="text-sm opacity-70 mb-4 whitespace-pre-line">{{ poll.description }}</p>
+{% endif %}
+
+{% if questions %}
+  <div class="overflow-x-auto mb-6">
+    <table class="table table-zebra w-full">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Question</th>
+          <th>Type</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for q in questions %}
+          <tr>
+            <td class="opacity-60">{{ q.order }}</td>
+            <td>{{ q.text }}</td>
+            <td><span class="badge badge-outline badge-sm">{{ q.get_kind_display }}</span></td>
+            <td class="text-right whitespace-nowrap">
+              {% if q.kind != "free_text" %}
+                <a href="{% url 'admin_poll_choices' poll.id q.id %}" class="btn btn-sm btn-secondary">Choices ({{ q.choices.count }})</a>
+              {% endif %}
+              <button class="btn btn-sm btn-primary" onclick="openQuestionModal({{ q.id }})">Edit</button>
+              <form method="post"
+                    action="{% url 'admin_poll_question_delete' poll.id q.id %}"
+                    class="inline"
+                    onsubmit="return confirm('Delete this question?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-error">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="opacity-60 italic mb-6">No questions yet — add one above.</p>
+{% endif %}
+
+<dialog id="question_modal" class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-4" id="question_modal_title">Question</h3>
+    <div id="question_modal_body">
+      {% include "_modal_form.html" %}
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+  function buildFormUrl(id) {
+    return "{% url 'admin_poll_question_form' poll.id 0 %}".replace("/0/form", "/" + id + "/form");
+  }
+  function buildSaveUrl(id) {
+    if (id === 0) return "{% url 'admin_poll_questions' poll.id %}";
+    return "{% url 'admin_poll_questions' poll.id %}" + id + "/";
+  }
+
+  function openQuestionModal(id) {
+    fetch(buildFormUrl(id), {headers: {"X-Requested-With": "XMLHttpRequest"}})
+      .then(r => r.text())
+      .then(html => {
+        var body = document.getElementById("question_modal_body");
+        body.innerHTML = html;
+        body.querySelector("form").action = buildSaveUrl(id);
+        document.getElementById("question_modal_title").textContent =
+          (id === 0 ? "New question" : "Edit question");
+        document.getElementById("question_modal").showModal();
+      });
+  }
+
+  {% if open_modal %}
+    document.addEventListener("DOMContentLoaded", function () {
+      var form = document.querySelector("#question_modal_body form");
+      if (form) form.action = buildSaveUrl({{ edit_id }});
+      document.getElementById("question_modal_title").textContent =
+        ({{ edit_id }} === 0 ? "New question" : "Edit question");
+      document.getElementById("question_modal").showModal();
+    });
+  {% endif %}
+</script>
+
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}My profile | Orman{% endblock %}
+{% block content %}
+
+<div class="card bg-base-200 border border-base-content/30 max-w-2xl">
+  <div class="card-body">
+    <h1 class="card-title">My profile</h1>
+
+    <form method="post" class="space-y-3 mt-2">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {% for field in form %}
+          <div class="form-control {% if field.name == 'instruments' %}sm:col-span-2{% endif %}">
+            <label class="label" for="{{ field.id_for_label }}">
+              <span class="label-text">{{ field.label }}</span>
+            </label>
+            {{ field }}
+            {% if field.errors %}
+              {% for error in field.errors %}
+                <p class="text-error text-sm mt-1">{{ error }}</p>
+              {% endfor %}
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="card-actions justify-between pt-2">
+        <a href="{% url 'password_change' %}" class="btn btn-ghost btn-sm">Change password</a>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

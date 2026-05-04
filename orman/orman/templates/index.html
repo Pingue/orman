@@ -1,31 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
 
-{% extends "base.html" %} 
-{% block content %} 
-    <h1 class="title is-1">Orman Music Group Management System</h1>
-    <div class="card">
-      <div class="card-content">
-        <div class="media">
-          <div class="media-left">
-            <figure class="image is-48x48">
-              <img
-                src="https://bulma.io/assets/images/placeholders/96x96.png"
-                alt="Placeholder image"
-              />
-            </figure>
-          </div>
-          <div class="media-content">
-            <p class="title is-4">Your Profile</p>
-            <p class="subtitle is-6"><a href="/profile">Mike Frost</a></p>
-          </div>
+<h1 class="text-3xl font-bold mb-6">Orman Music Group Management System</h1>
+
+<div class="grid gap-6 md:grid-cols-2 max-w-5xl">
+
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title">Your profile</h2>
+      {% if user.is_authenticated %}
+        <p>Signed in as <strong>{{ user.get_username }}</strong></p>
+        {% if person %}
+          <p>{{ person.firstNames }} {{ person.lastName }}</p>
+          {% if person.instruments.all %}
+            <p class="text-sm opacity-70">
+              Instruments: {% for i in person.instruments.all %}{{ i.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="text-sm opacity-70 italic">
+            Your account isn't linked to a Person record yet.
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="opacity-70">You're not signed in.</p>
+        <div class="card-actions mt-2">
+          <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">Sign in</a>
         </div>
-    
-        <div class="content">
-          <p>Instrument: Viola</p>
-          <p>Next Rehearsal: <a href="/event/1235">7th January, St. Mary's Church</a></p>
-          <p>Next Concert: <a href="/event/1234">5th January, Christ Church Freemantle</a></p>
-        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title">Coming up</h2>
+
+      <div>
+        <h3 class="font-semibold">Next rehearsal</h3>
+        {% if next_rehearsal %}
+          <p>
+            <strong>{{ next_rehearsal.name }}</strong>
+            — {{ next_rehearsal.startDate|date:"jS F Y" }}{% if next_rehearsal.startTime %}, {{ next_rehearsal.startTime|time:"H:i" }}{% endif %}
+          </p>
+          {% if next_rehearsal.venue %}
+            <p class="text-sm opacity-70">{{ next_rehearsal.venue.name }}</p>
+          {% endif %}
+        {% else %}
+          <p class="opacity-70 italic">No upcoming rehearsals.</p>
+        {% endif %}
+      </div>
+
+      <div class="mt-4">
+        <h3 class="font-semibold">Next performance</h3>
+        {% if next_performance %}
+          <p>
+            <strong>{{ next_performance.name }}</strong>
+            — {{ next_performance.date|date:"jS F Y" }}{% if next_performance.time %}, {{ next_performance.time|time:"H:i" }}{% endif %}
+          </p>
+          {% if next_performance.venue %}
+            <p class="text-sm opacity-70">{{ next_performance.venue.name }}</p>
+          {% endif %}
+        {% else %}
+          <p class="opacity-70 italic">No upcoming performances.</p>
+        {% endif %}
       </div>
     </div>
   </div>
-  {{people}}
+
+</div>
+
 {% endblock %}

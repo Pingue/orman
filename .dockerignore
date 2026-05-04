@@ -1,0 +1,13 @@
+.git
+.claude
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+node_modules
+**/node_modules
+orman/db.sqlite3
+orman/media
+orman/staticfiles
+.env
+*.env

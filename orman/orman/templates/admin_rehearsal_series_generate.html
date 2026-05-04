@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Generate rehearsals — {{ series }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Generate rehearsals</p>
+    <h1 class="text-3xl font-bold">{{ series }}</h1>
+    <p class="text-sm opacity-70 mt-1">
+      {{ series.get_frequency_display }} · {{ series.get_day_of_week_display }}
+      {% if series.start_time %} · {{ series.start_time }}{% endif %}
+    </p>
+  </div>
+  <a href="{% url 'admin_rehearsal_series' %}" class="btn btn-sm btn-ghost">← Series</a>
+</div>
+
+<div class="card bg-base-200 border border-base-content/30 max-w-sm">
+  <div class="card-body">
+    <p class="text-sm opacity-70 mb-4">
+      Create rehearsal records for this series up to (and including) the chosen date.
+      Dates that already have a rehearsal in this series are skipped.
+    </p>
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+      <div class="form-control">
+        <label class="label" for="{{ form.until.id_for_label }}">
+          <span class="label-text">{{ form.until.label }}</span>
+        </label>
+        {{ form.until }}
+        {% for err in form.until.errors %}
+          <span class="text-error text-sm mt-1">{{ err }}</span>
+        {% endfor %}
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Generate</button>
+        <a href="{% url 'admin_rehearsal_series' %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

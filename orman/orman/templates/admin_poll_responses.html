@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Poll responses — {{ poll.title }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-xs uppercase opacity-60">Poll responses</p>
+    <h1 class="text-3xl font-bold">{{ poll.title }}</h1>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'admin_poll_responses_table' poll.id %}" class="btn btn-sm btn-secondary">Table view</a>
+    <a href="{% url 'admin_poll' %}" class="btn btn-sm btn-ghost">← All polls</a>
+  </div>
+</div>
+
+{% if poll.description %}
+  <p class="text-sm opacity-70 mb-6 whitespace-pre-line">{{ poll.description }}</p>
+{% endif %}
+
+{% for q in questions %}
+  <div class="card bg-base-200 border border-base-content/30 mb-6">
+    <div class="card-body">
+      <h2 class="card-title text-base">
+        {{ forloop.counter }}. {{ q.text }}
+        <span class="badge badge-outline badge-sm ml-2">{{ q.get_kind_display }}</span>
+      </h2>
+
+      {% if q.kind == "free_text" %}
+        {% if q.answers.all %}
+          <div class="overflow-x-auto mt-2">
+            <table class="table table-zebra w-full">
+              <thead><tr><th>Person</th><th>Answer</th><th>Updated</th></tr></thead>
+              <tbody>
+                {% for a in q.answers.all %}
+                  <tr>
+                    <td>{{ a.person }}</td>
+                    <td class="whitespace-pre-line">{{ a.text_value }}</td>
+                    <td class="text-sm opacity-70">{{ a.updatedAt|date:"j M Y, H:i" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="opacity-60 italic text-sm mt-2">No answers yet.</p>
+        {% endif %}
+
+      {% else %}
+        {% if q.choices.all %}
+          <div class="mt-2 space-y-2">
+            {% for choice in q.choices.all %}
+              {% with count=choice.answers.count %}
+                <div class="flex items-center gap-3">
+                  <a href="{% url 'admin_poll_choice_respondents' poll.id choice.id %}"
+                     class="w-48 text-sm truncate link link-hover">{{ choice.text }}</a>
+                  <div class="flex-1 bg-base-300 rounded-full h-3 overflow-hidden">
+                    {% if q.answers.count %}
+                      <div class="bg-primary h-3 rounded-full"
+                           style="width: {% widthratio count q.answers.count 100 %}%"></div>
+                    {% endif %}
+                  </div>
+                  <span class="text-sm opacity-70 w-12 text-right">{{ count }}</span>
+                </div>
+              {% endwith %}
+            {% endfor %}
+            <p class="text-xs opacity-60 mt-1">{{ q.answers.count }} answer{{ q.answers.count|pluralize }} total</p>
+          </div>
+        {% else %}
+          <p class="opacity-60 italic text-sm mt-2">No choices defined.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+{% empty %}
+  <p class="opacity-70 italic">This poll has no questions yet.</p>
+{% endfor %}
+
+{% endblock %}

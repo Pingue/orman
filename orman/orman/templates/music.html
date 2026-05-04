@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Music | Orman{% endblock %}
+{% block content %}
+
+<h1 class="text-3xl font-bold mb-6">Music library</h1>
+
+{% if not items %}
+  <p class="opacity-70 italic">No music in the library yet.</p>
+{% else %}
+<div class="max-w-5xl space-y-4">
+  {% for item in items %}
+    <div class="card bg-base-200 border border-base-content/30" id="item-{{ item.id }}">
+      <div class="card-body p-4 gap-2">
+
+        <!-- Title / composer / duration -->
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="font-semibold text-lg leading-tight">{{ item.name }}</p>
+            {% if item.composer %}<p class="text-sm opacity-60">{{ item.composer }}</p>{% endif %}
+          </div>
+          {% if item.duration %}
+            <span class="text-sm opacity-50 whitespace-nowrap">{{ item.duration }}</span>
+          {% endif %}
+        </div>
+
+        <!-- My instrument parts (shown immediately) -->
+        {% if item.my_parts %}
+          <div class="space-y-0.5 mt-1">
+            {% for part in item.my_parts %}
+              <div class="flex items-center gap-2 text-sm py-0.5">
+                <span class="font-medium w-36 truncate" title="{{ part.instrument }}">{{ part.instrument }}</span>
+                {% if part.file %}
+                  <a href="{{ part.file.url }}" target="_blank" rel="noopener noreferrer"
+                     class="link link-primary">
+                    <i class="fas fa-download mr-1"></i>Download
+                  </a>
+                {% elif part.external_link %}
+                  <a href="{{ part.external_link }}" target="_blank" rel="noopener noreferrer"
+                     class="link link-primary">
+                    <i class="fas fa-external-link-alt mr-1"></i>Open
+                  </a>
+                {% else %}
+                  <span class="opacity-40 italic">No file yet</span>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <!-- Expandable section: other parts + full score -->
+        {% if item.other_parts or item.score_file or item.external_link %}
+          <details class="mt-1">
+            <summary class="text-xs cursor-pointer opacity-50 hover:opacity-80 select-none list-none flex items-center gap-1">
+              <i class="fas fa-chevron-right text-xs transition-transform details-chevron"></i>
+              See all other parts &amp; full score
+            </summary>
+            <div class="mt-2 space-y-0.5 pl-1">
+              {% if item.score_file or item.external_link %}
+                <div class="flex items-center gap-2 text-sm py-0.5">
+                  <span class="font-medium w-36 truncate opacity-70">Full score</span>
+                  {% if item.score_file %}
+                    <a href="{{ item.score_file.url }}" target="_blank" rel="noopener noreferrer"
+                       class="link link-secondary">
+                      <i class="fas fa-download mr-1"></i>Download
+                    </a>
+                  {% elif item.external_link %}
+                    <a href="{{ item.external_link }}" target="_blank" rel="noopener noreferrer"
+                       class="link link-secondary">
+                      <i class="fas fa-external-link-alt mr-1"></i>Open
+                    </a>
+                  {% endif %}
+                </div>
+              {% endif %}
+              {% for part in item.other_parts %}
+                <div class="flex items-center gap-2 text-sm py-0.5">
+                  <span class="w-36 truncate opacity-70" title="{{ part.instrument }}">{{ part.instrument }}</span>
+                  {% if part.file %}
+                    <a href="{{ part.file.url }}" target="_blank" rel="noopener noreferrer"
+                       class="link link-secondary">
+                      <i class="fas fa-download mr-1"></i>Download
+                    </a>
+                  {% elif part.external_link %}
+                    <a href="{{ part.external_link }}" target="_blank" rel="noopener noreferrer"
+                       class="link link-secondary">
+                      <i class="fas fa-external-link-alt mr-1"></i>Open
+                    </a>
+                  {% else %}
+                    <span class="opacity-40 italic">No file yet</span>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </details>
+        {% else %}
+          {% if not item.my_parts %}
+            <p class="text-sm opacity-40 italic">No parts uploaded yet.</p>
+          {% endif %}
+        {% endif %}
+
+        {% if item.notes %}
+          <p class="text-sm opacity-60 mt-1 border-t border-base-300 pt-2">{{ item.notes|linebreaksbr }}</p>
+        {% endif %}
+
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Rotate the chevron when details opens -->
+<script>
+  document.querySelectorAll("details").forEach(function(el) {
+    el.addEventListener("toggle", function() {
+      const chev = el.querySelector(".details-chevron");
+      if (chev) chev.style.transform = el.open ? "rotate(90deg)" : "";
+    });
+  });
+</script>
+
+{% endblock %}

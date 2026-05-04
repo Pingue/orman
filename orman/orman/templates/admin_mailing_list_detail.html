@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Members — {{ ml }} | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <p class="text-xs uppercase opacity-60">Mailing list</p>
+    <h1 class="text-3xl font-bold">{{ ml }}</h1>
+    {% if ml.address %}<p class="text-sm opacity-60 mt-0.5">{{ ml.address }}</p>{% endif %}
+  </div>
+  <a href="{% url 'admin_mailing_list' %}" class="btn btn-sm btn-ghost">← Lists</a>
+</div>
+
+{% if ml.description %}
+  <p class="text-sm opacity-60 mb-4 max-w-xl">{{ ml.description }}</p>
+{% endif %}
+
+<!-- ── Dynamic membership badge ─────────────────────────────────────────── -->
+{% if ml.is_dynamic %}
+  <div class="flex items-center gap-2 mb-4">
+    <span class="badge badge-secondary gap-1 text-sm py-3 px-3">
+      <i class="fas fa-filter text-xs"></i>
+      Dynamic:
+      {% if ml.filter_type == 'all_members' %}
+        All active members
+      {% elif ml.filter_type == 'instrument' %}
+        {{ ml.filter_instrument }} players
+      {% elif ml.filter_type == 'instrument_family' %}
+        {{ ml.filter_instrument_family }} section
+      {% endif %}
+    </span>
+    <span class="text-sm opacity-50">{{ members_display|length }} members — updates automatically on reconcile</span>
+  </div>
+{% endif %}
+
+<!-- ── Provider info ─────────────────────────────────────────────────────── -->
+{% if provider_needs_sync %}
+  <div class="alert alert-info text-sm mb-4 max-w-3xl">
+    <i class="fas fa-info-circle"></i>
+    <div>
+      <strong>Provider: {{ ml.get_provider_display }}</strong>
+      {% if ml.provider == 'google_groups' %}
+        — Sync uses the Admin SDK to manage members of group <strong>{{ ml.list_id }}</strong>.
+        Requires <code>google-api-python-client</code> and a service account with domain-wide delegation.
+      {% elif ml.provider == 'mailchimp' %}
+        — Sync subscribes/updates contacts in Mailchimp audience <strong>{{ ml.list_id }}</strong>.
+      {% elif ml.provider == 'brevo' %}
+        — Sync adds contacts to Brevo list <strong>{{ ml.list_id }}</strong>.
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+<!-- ── Action bar ─────────────────────────────────────────────────────────── -->
+<div class="flex gap-2 mb-5 flex-wrap">
+
+  {% if ml.is_dynamic %}
+    <!-- Reconcile: update local tracking table to match current membership -->
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reconcile">
+      <button type="submit" class="btn btn-sm btn-outline">
+        <i class="fas fa-sync-alt mr-1"></i>Reconcile
+      </button>
+    </form>
+  {% endif %}
+
+  {% if provider_needs_sync %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="sync_all">
+      <button type="submit" class="btn btn-sm btn-secondary">
+        <i class="fas fa-cloud-upload-alt mr-1"></i>
+        {% if ml.is_dynamic %}Reconcile &amp; sync{% else %}Sync all{% endif %}
+        to {{ ml.get_provider_display }}
+      </button>
+    </form>
+  {% endif %}
+
+  <a href="?export=csv" class="btn btn-sm btn-ghost">
+    <i class="fas fa-download mr-1"></i>Export CSV
+  </a>
+  <a href="?export=emails" class="btn btn-sm btn-ghost">
+    <i class="fas fa-list-ul mr-1"></i>Export email list
+  </a>
+</div>
+
+<!-- ── Members table ──────────────────────────────────────────────────────── -->
+<div class="max-w-3xl">
+  <h2 class="text-lg font-semibold mb-2">
+    {% if ml.is_dynamic %}Current membership{% else %}Members{% endif %}
+    <span class="text-sm font-normal opacity-50 ml-1">({{ members_display|length }})</span>
+  </h2>
+
+  {% if members_display %}
+    <div class="overflow-x-auto mb-8">
+      <table class="table table-sm w-full">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            {% if provider_needs_sync %}<th>Sync status</th>{% endif %}
+            {% if not ml.is_dynamic %}<th class="text-right">Actions</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in members_display %}
+            <tr>
+              <td class="font-medium whitespace-nowrap">
+                {{ m.person.firstNames }} {{ m.person.lastName }}
+              </td>
+              <td class="text-sm opacity-70">{{ m.person.email }}</td>
+
+              {% if provider_needs_sync %}
+                <td>
+                  {% if m.sync_status == 'synced' %}
+                    <span class="badge badge-success badge-sm">Synced</span>
+                    {% if m.synced_at %}
+                      <span class="text-xs opacity-40 ml-1">{{ m.synced_at|date:"j M" }}</span>
+                    {% endif %}
+                  {% elif m.sync_status == 'error' %}
+                    <span class="badge badge-error badge-sm" title="{{ m.sync_error }}">Error</span>
+                    {% if m.sync_error %}
+                      <span class="text-xs text-error ml-1" title="{{ m.sync_error }}">
+                        {{ m.sync_error|truncatechars:55 }}
+                      </span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-warning badge-sm">Pending</span>
+                  {% endif %}
+                </td>
+              {% endif %}
+
+              {% if not ml.is_dynamic %}
+                <td class="text-right whitespace-nowrap">
+                  {% if provider_needs_sync %}
+                    <form method="post" class="inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="sync_member">
+                      <input type="hidden" name="member_id" value="{{ m.mlm_id }}">
+                      <button type="submit" class="btn btn-xs btn-ghost opacity-70" title="Sync this person">
+                        <i class="fas fa-sync text-xs"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                  <form method="post" class="inline"
+                        onsubmit="return confirm('Remove {{ m.person.firstNames }} {{ m.person.lastName }} from this list?')">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="remove_member">
+                    <input type="hidden" name="member_id" value="{{ m.mlm_id }}">
+                    <button type="submit" class="btn btn-xs btn-ghost text-error" title="Remove">
+                      <i class="fas fa-trash text-xs"></i>
+                    </button>
+                  </form>
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% else %}
+    <p class="opacity-60 italic mb-8">
+      {% if ml.is_dynamic %}
+        No members match this filter yet.
+        {% if not provider_needs_sync %}Hit Reconcile to refresh.{% endif %}
+      {% else %}
+        No members yet.
+      {% endif %}
+    </p>
+  {% endif %}
+
+  <!-- ── Add members (manual lists only) ──────────────────────────────── -->
+  {% if not ml.is_dynamic %}
+    <h2 class="text-lg font-semibold mb-3">Add members</h2>
+
+    <div class="mb-3">
+      <form method="post"
+            onsubmit="return confirm('Add all active members to this list?')">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_all_members">
+        <button type="submit" class="btn btn-sm btn-outline">
+          <i class="fas fa-users mr-1"></i>Add all active members
+        </button>
+      </form>
+    </div>
+
+    {% if available_people %}
+      <form method="post" id="add-members-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_members">
+
+        <input type="text" id="people-search"
+               placeholder="Filter by name or email…"
+               class="input input-bordered input-sm w-full max-w-sm mb-2"
+               oninput="filterPeople(this.value)">
+
+        <div class="max-h-64 overflow-y-auto border border-base-content/30 rounded p-2 space-y-0.5 mb-3"
+             id="people-list">
+          {% for person in available_people %}
+            <label class="flex items-center gap-2 px-1 py-1 hover:bg-base-200 rounded cursor-pointer person-row"
+                   data-name="{{ person.firstNames|lower }} {{ person.lastName|lower }}"
+                   data-email="{{ person.email|lower }}">
+              <input type="checkbox" name="person_ids" value="{{ person.id }}"
+                     class="checkbox checkbox-sm">
+              <span class="flex-1 text-sm">{{ person.firstNames }} {{ person.lastName }}</span>
+              <span class="text-xs opacity-50">{{ person.email }}</span>
+            </label>
+          {% endfor %}
+        </div>
+
+        <div class="flex gap-2 items-center">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus mr-1"></i>Add selected
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm text-xs"
+                  onclick="toggleAll(true)">Select all</button>
+          <button type="button" class="btn btn-ghost btn-sm text-xs"
+                  onclick="toggleAll(false)">Clear</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="opacity-60 italic text-sm">All active people are already on this list.</p>
+    {% endif %}
+
+  {% else %}
+    <!-- Dynamic list: explain how to change membership -->
+    <div class="alert text-sm max-w-xl border border-base-content/20">
+      <i class="fas fa-info-circle opacity-50"></i>
+      <div class="opacity-70">
+        This is a dynamic list — membership is computed from the roster.
+        To change who's in it, edit the <strong>membership filter</strong> on
+        <a href="{% url 'admin_mailing_list' %}" class="link">the list settings page</a>,
+        then hit <strong>Reconcile</strong>.
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  function filterPeople(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll(".person-row").forEach(function (row) {
+      const match = !q || row.dataset.name.includes(q) || row.dataset.email.includes(q);
+      row.style.display = match ? "" : "none";
+    });
+  }
+  function toggleAll(checked) {
+    document.querySelectorAll("#people-list input[type=checkbox]").forEach(function (cb) {
+      if (cb.closest(".person-row").style.display !== "none") cb.checked = checked;
+    });
+  }
+</script>
+
+{% endblock %}

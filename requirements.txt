@@ -1,6 +1,6 @@
-asgiref==3.7.2
-Django==4.2.9
+Django>=4.2.16,<5.0
+django-allauth[socialaccount]==65.14.3
 django-browser-reload==1.12.1
 django-tailwind==3.6.0
-sqlparse==0.4.4
-typing_extensions==4.9.0
+gunicorn==22.0.0
+whitenoise==6.7.0

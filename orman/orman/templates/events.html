@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Events | Orman{% endblock %}
+{% block content %}
+
+<h1 class="text-3xl font-bold mb-6">Upcoming events</h1>
+
+{% if not person %}
+  <div class="alert alert-info mb-4">
+    Your login isn't linked to a Person record yet, so you can't RSVP. Ask an administrator to link your account.
+  </div>
+{% endif %}
+
+<div class="grid gap-6 md:grid-cols-2 max-w-5xl">
+
+  <section>
+    <h2 class="text-xl font-semibold mb-3">Rehearsals</h2>
+    {% if rehearsals %}
+      <ul class="space-y-2">
+        {% for r in rehearsals %}
+          <li class="card bg-base-200 border border-base-content/30">
+            <div class="card-body p-4">
+              <p class="font-semibold">{{ r.name }}</p>
+              <p class="text-sm">
+                {{ r.startDate|date:"jS F Y" }}{% if r.startTime %},
+                  {{ r.startTime|time:"H:i" }}{% if r.endTime %}–{{ r.endTime|time:"H:i" }}{% endif %}
+                {% endif %}
+              </p>
+              {% if r.venue %}<p class="text-sm opacity-70">{{ r.venue.name }}</p>{% endif %}
+
+              {% if r.ordered_items %}
+                <details class="text-sm mt-1 group">
+                  <summary class="cursor-pointer opacity-60 hover:opacity-90 select-none list-none flex items-center gap-1">
+                    <i class="fas fa-chevron-right text-xs transition-transform group-open:rotate-90"></i>
+                    Repertoire ({{ r.ordered_items|length }} piece{% if r.ordered_items|length != 1 %}s{% endif %})
+                  </summary>
+                  <ol class="mt-1 pl-4 space-y-0.5 list-decimal list-inside">
+                    {% for item in r.ordered_items %}
+                      <li class="opacity-80">
+                        <a href="{% url 'music' %}#item-{{ item.musicItem.id }}" class="link link-hover">{{ item.musicItem }}</a>
+                        {% if item.start_time %}<span class="opacity-50 text-xs ml-1">@ {{ item.start_time|time:"H:i" }}</span>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ol>
+                </details>
+              {% endif %}
+
+              {% if person %}
+                <form method="post" action="{% url 'rsvp' 'rehearsal' r.id %}" class="mt-2 space-y-2">
+                  {% csrf_token %}
+                  {% if r.my_rsvp %}
+                    <input type="hidden" name="status" value="{{ r.my_rsvp.status }}">
+                  {% endif %}
+                  <div class="join">
+                    {% for value, label in rsvp_choices %}
+                      <button type="submit" name="status" value="{{ value }}"
+                              class="btn btn-sm join-item
+                                {% if r.my_rsvp and r.my_rsvp.status == value %}btn-primary{% else %}btn-ghost{% endif %}">
+                        {{ label }}
+                      </button>
+                    {% endfor %}
+                  </div>
+                  {% if my_instruments and r.my_rsvp %}
+                    <div class="mt-1 space-y-1">
+                      <p class="text-xs opacity-60">Playing as:</p>
+                      {% with selected=r.my_rsvp.playing_instruments.all %}
+                        {% for inst in my_instruments %}
+                          <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="playing_instruments" value="{{ inst.id }}"
+                                   class="checkbox checkbox-xs"
+                                   onchange="this.form.submit()"
+                                   {% if my_instruments|length == 1 %}checked{% else %}{% for s in selected %}{% if s.id == inst.id %}checked{% endif %}{% endfor %}{% endif %}>
+                            {{ inst }}
+                          </label>
+                        {% endfor %}
+                      {% endwith %}
+                    </div>
+                  {% endif %}
+                </form>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="opacity-70 italic">No upcoming rehearsals.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="text-xl font-semibold mb-3">Performances</h2>
+    {% if performances %}
+      <ul class="space-y-2">
+        {% for p in performances %}
+          <li class="card bg-base-200 border border-base-content/30">
+            <div class="card-body p-4">
+              <p class="font-semibold">
+                {{ p.name }}
+                {% if not p.published %}
+                  <span class="badge badge-ghost text-xs ml-1">unpublished</span>
+                {% endif %}
+              </p>
+              <p class="text-sm">
+                {{ p.date|date:"jS F Y" }}{% if p.time %}, {{ p.time|time:"H:i" }}{% endif %}
+              </p>
+              {% if p.venue %}<p class="text-sm opacity-70">{{ p.venue.name }}</p>{% endif %}
+              {% if p.publicDescription %}
+                <p class="text-sm mt-2">{{ p.publicDescription|linebreaksbr }}</p>
+              {% endif %}
+
+              {% if p.ordered_items %}
+                <details class="text-sm mt-1 group">
+                  <summary class="cursor-pointer opacity-60 hover:opacity-90 select-none list-none flex items-center gap-1">
+                    <i class="fas fa-chevron-right text-xs transition-transform group-open:rotate-90"></i>
+                    Programme ({{ p.ordered_items|length }} piece{% if p.ordered_items|length != 1 %}s{% endif %})
+                  </summary>
+                  <ol class="mt-1 pl-4 space-y-0.5 list-decimal list-inside">
+                    {% for item in p.ordered_items %}
+                      <li class="opacity-80">
+                        <a href="{% url 'music' %}#item-{{ item.musicItem.id }}" class="link link-hover">{{ item.musicItem }}</a>
+                        {% if item.start_time %}<span class="opacity-50 text-xs ml-1">@ {{ item.start_time|time:"H:i" }}</span>{% endif %}
+                        {% if item.musicItem.duration %}<span class="opacity-40 text-xs ml-1">({{ item.musicItem.duration }})</span>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ol>
+                </details>
+              {% endif %}
+
+              {% if person %}
+                <form method="post" action="{% url 'rsvp' 'performance' p.id %}" class="mt-2 space-y-2">
+                  {% csrf_token %}
+                  {% if p.my_rsvp %}
+                    <input type="hidden" name="status" value="{{ p.my_rsvp.status }}">
+                  {% endif %}
+                  <div class="join">
+                    {% for value, label in rsvp_choices %}
+                      <button type="submit" name="status" value="{{ value }}"
+                              class="btn btn-sm join-item
+                                {% if p.my_rsvp and p.my_rsvp.status == value %}btn-primary{% else %}btn-ghost{% endif %}">
+                        {{ label }}
+                      </button>
+                    {% endfor %}
+                  </div>
+                  {% if my_instruments and p.my_rsvp %}
+                    <div class="mt-1 space-y-1">
+                      <p class="text-xs opacity-60">Playing as:</p>
+                      {% with selected=p.my_rsvp.playing_instruments.all %}
+                        {% for inst in my_instruments %}
+                          <label class="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="playing_instruments" value="{{ inst.id }}"
+                                   class="checkbox checkbox-xs"
+                                   onchange="this.form.submit()"
+                                   {% if my_instruments|length == 1 %}checked{% else %}{% for s in selected %}{% if s.id == inst.id %}checked{% endif %}{% endfor %}{% endif %}>
+                            {{ inst }}
+                          </label>
+                        {% endfor %}
+                      {% endwith %}
+                    </div>
+                  {% endif %}
+                </form>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="opacity-70 italic">No upcoming performances.</p>
+    {% endif %}
+  </section>
+
+</div>
+
+{% endblock %}
