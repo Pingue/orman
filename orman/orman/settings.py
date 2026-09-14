@@ -165,7 +165,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SITE_NAME = os.environ.get("SITE_NAME", "Orman")
 
 # Email — defaults to console backend for development.
-# Set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend in production.
+# SMTP:  EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# SES:   EMAIL_BACKEND=django_ses.SESBackend  (+ AWS_* vars below)
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
@@ -175,7 +176,13 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "25"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false").lower() == "true"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", f"noreply@example.com")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@example.com")
+
+# Amazon SES (django_ses backend)
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+AWS_SES_REGION_NAME = os.environ.get("AWS_SES_REGION_NAME", "eu-west-1")
+AWS_SES_REGION_ENDPOINT = f"email.{AWS_SES_REGION_NAME}.amazonaws.com"
 
 TAILWIND_APP_NAME = 'theme'
 
