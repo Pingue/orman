@@ -33,7 +33,8 @@ jobs:
           configFilePath: "GitVersion.yml"
 
       - name: Display version
-        run: echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
+        run: |
+          echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
 
       - name: Create tag
         uses: actions/github-script@v7
@@ -57,7 +58,7 @@ jobs:
           fetch-tags: true
 
       - name: Lowercase image name
-        run: echo "IMG=${IMAGE_NAME,,}" >> $GITHUB_ENV
+        run: echo "IMG=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
