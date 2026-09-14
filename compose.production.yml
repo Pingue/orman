@@ -42,12 +42,6 @@ services:
       - "traefik.http.routers.orman.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.orman.entrypoints=websecure"
       - "traefik.http.routers.orman.tls.certresolver=le"
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             gunicorn orman.wsgi:application
-               --bind 0.0.0.0:8000
-               --workers 2
-               --access-logfile -"
 
   watchtower:
     image: containrrr/watchtower

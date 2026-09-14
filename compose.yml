@@ -18,12 +18,6 @@ services:
       EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@example.com}
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             gunicorn orman.wsgi:application
-               --bind 0.0.0.0:8000
-               --workers 2
-               --access-logfile -"
 
 volumes:
   db:

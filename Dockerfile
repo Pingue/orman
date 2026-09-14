@@ -32,8 +32,12 @@ COPY --from=node-builder /app/theme/static/css/dist/styles.css \
 # collectstatic never makes real requests.
 RUN SECRET_KEY=collectstatic-placeholder python manage.py collectstatic --noinput
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "orman.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
      "--workers", "2", \
