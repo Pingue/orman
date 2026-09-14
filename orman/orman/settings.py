@@ -30,6 +30,9 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 _allowed = os.environ.get("ALLOWED_HOSTS", "")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
+_trusted = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [h.strip() for h in _trusted.split(",") if h.strip()]
+
 # Social login (django-allauth). Set True and configure SOCIALACCOUNT_PROVIDERS to enable.
 SOCIAL_LOGIN_ENABLED = False
 
