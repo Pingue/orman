@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -22,7 +22,45 @@ def admin_required(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
+from django.conf import settings as _settings
+from django.contrib.auth import login as _auth_login
 from . import crud, forms, models
+
+# ── iCal helpers ────────────────────────────────────────────────────────────
+
+def _ical_escape(value: str) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _ical_fold(line: str) -> str:
+    """Fold a content line at 75 characters (RFC 5545 §3.1)."""
+    if len(line) <= 75:
+        return line
+    parts = []
+    while len(line) > 75:
+        parts.append(line[:75])
+        line = " " + line[75:]
+    parts.append(line)
+    return "\r\n".join(parts)
+
+
+def _ical_prop(name: str, value: str) -> str:
+    return _ical_fold(f"{name}:{value}")
+
+
+def _ical_date(d) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def _ical_datetime(d, t) -> str:
+    return d.strftime("%Y%m%d") + "T" + t.strftime("%H%M%S")
 
 
 def _attendance_breakdown(rsvps):
@@ -57,6 +95,253 @@ def _merged_attendance(yes_rsvps, maybe_rsvps):
             "maybe": maybe.get(inst, []),
         })
     return rows
+
+
+def _passkey_rp_id(request):
+    return request.get_host().split(":")[0]
+
+
+def _passkey_origin(request):
+    return f"{request.scheme}://{request.get_host()}"
+
+
+def _parse_reg_credential(data):
+    from webauthn.helpers.structs import (
+        RegistrationCredential, AuthenticatorAttestationResponse,
+        PublicKeyCredentialType,
+    )
+    from webauthn.helpers import base64url_to_bytes
+    r = data["response"]
+    return RegistrationCredential(
+        id=data["id"],
+        raw_id=base64url_to_bytes(data["rawId"]),
+        response=AuthenticatorAttestationResponse(
+            client_data_json=base64url_to_bytes(r["clientDataJSON"]),
+            attestation_object=base64url_to_bytes(r["attestationObject"]),
+        ),
+        type=PublicKeyCredentialType.PUBLIC_KEY,
+    )
+
+
+def _parse_auth_credential(data):
+    from webauthn.helpers.structs import (
+        AuthenticationCredential, AuthenticatorAssertionResponse,
+        PublicKeyCredentialType,
+    )
+    from webauthn.helpers import base64url_to_bytes
+    r = data["response"]
+    return AuthenticationCredential(
+        id=data["id"],
+        raw_id=base64url_to_bytes(data["rawId"]),
+        response=AuthenticatorAssertionResponse(
+            client_data_json=base64url_to_bytes(r["clientDataJSON"]),
+            authenticator_data=base64url_to_bytes(r["authenticatorData"]),
+            signature=base64url_to_bytes(r["signature"]),
+            user_handle=base64url_to_bytes(r["userHandle"]) if r.get("userHandle") else None,
+        ),
+        type=PublicKeyCredentialType.PUBLIC_KEY,
+    )
+
+
+@login_required
+def passkey_register_begin(request):
+    """Return WebAuthn registration options as JSON."""
+    import json
+    from webauthn import generate_registration_options, options_to_json
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria, ResidentKeyRequirement,
+        UserVerificationRequirement, PublicKeyCredentialDescriptor,
+    )
+    from webauthn.helpers import bytes_to_base64url
+
+    options = generate_registration_options(
+        rp_id=_passkey_rp_id(request),
+        rp_name=getattr(_settings, "SITE_NAME", "Orman"),
+        user_id=str(request.user.pk).encode(),
+        user_name=request.user.email,
+        user_display_name=str(request.user),
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.PREFERRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        ),
+        exclude_credentials=[
+            PublicKeyCredentialDescriptor(id=bytes(pk.credential_id))
+            for pk in request.user.passkeys.all()
+        ],
+    )
+    request.session["wn_reg_challenge"] = bytes_to_base64url(options.challenge)
+    return JsonResponse(json.loads(options_to_json(options)))
+
+
+@login_required
+@require_POST
+def passkey_register_complete(request):
+    """Verify registration and store the new passkey."""
+    import json
+    from webauthn import verify_registration_response
+    from webauthn.helpers import base64url_to_bytes
+
+    challenge_b64 = request.session.pop("wn_reg_challenge", None)
+    if not challenge_b64:
+        return JsonResponse({"error": "Session expired — please try again"}, status=400)
+    try:
+        data = json.loads(request.body)
+        verification = verify_registration_response(
+            credential=_parse_reg_credential(data),
+            expected_challenge=base64url_to_bytes(challenge_b64),
+            expected_rp_id=_passkey_rp_id(request),
+            expected_origin=_passkey_origin(request),
+            require_user_verification=False,
+        )
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    models.Passkey.objects.create(
+        person=request.user,
+        name=data.get("name") or "Passkey",
+        credential_id=bytes(verification.credential_id),
+        credential_public_key=bytes(verification.credential_public_key),
+        sign_count=verification.sign_count,
+    )
+    return JsonResponse({"ok": True})
+
+
+def passkey_auth_begin(request):
+    """Return WebAuthn authentication options as JSON (discoverable-credential flow)."""
+    import json
+    from webauthn import generate_authentication_options, options_to_json
+    from webauthn.helpers.structs import UserVerificationRequirement
+    from webauthn.helpers import bytes_to_base64url
+
+    options = generate_authentication_options(
+        rp_id=_passkey_rp_id(request),
+        user_verification=UserVerificationRequirement.PREFERRED,
+        # No allowCredentials → browser prompts the user to pick a passkey.
+    )
+    request.session["wn_auth_challenge"] = bytes_to_base64url(options.challenge)
+    return JsonResponse(json.loads(options_to_json(options)))
+
+
+@require_POST
+def passkey_auth_complete(request):
+    """Verify authentication assertion, update sign-count, and log the user in."""
+    import json
+    from webauthn import verify_authentication_response
+    from webauthn.helpers import base64url_to_bytes
+
+    challenge_b64 = request.session.pop("wn_auth_challenge", None)
+    if not challenge_b64:
+        return JsonResponse({"error": "Session expired"}, status=400)
+
+    try:
+        data = json.loads(request.body)
+        credential = _parse_auth_credential(data)
+    except Exception as exc:
+        return JsonResponse({"error": f"Invalid credential: {exc}"}, status=400)
+
+    cred_id_bytes = base64url_to_bytes(data["rawId"])
+    passkey = (models.Passkey.objects
+               .filter(credential_id=cred_id_bytes)
+               .select_related("person")
+               .first())
+    if not passkey:
+        return JsonResponse({"error": "Passkey not found"}, status=400)
+
+    try:
+        verification = verify_authentication_response(
+            credential=credential,
+            expected_challenge=base64url_to_bytes(challenge_b64),
+            expected_rp_id=_passkey_rp_id(request),
+            expected_origin=_passkey_origin(request),
+            credential_public_key=bytes(passkey.credential_public_key),
+            credential_current_sign_count=passkey.sign_count,
+            require_user_verification=False,
+        )
+    except Exception as exc:
+        return JsonResponse({"error": f"Verification failed: {exc}"}, status=400)
+
+    passkey.sign_count = verification.new_sign_count
+    passkey.last_used_at = timezone.now()
+    passkey.save(update_fields=["sign_count", "last_used_at"])
+
+    _auth_login(request, passkey.person, backend="django.contrib.auth.backends.ModelBackend")
+    return JsonResponse({"ok": True, "next": "/"})
+
+
+@login_required
+@require_POST
+def passkey_delete(request, passkey_id):
+    """Remove a passkey owned by the current user."""
+    passkey = get_object_or_404(models.Passkey, pk=passkey_id, person=request.user)
+    passkey.delete()
+    return JsonResponse({"ok": True})
+
+
+def calendar_ics(request, token):
+    """Return an iCal feed for all rehearsals and published performances.
+
+    The UUID token in the URL acts as authentication — no session required,
+    so calendar apps can subscribe directly.
+    """
+    from datetime import datetime as _dt
+
+    get_object_or_404(models.Person, calendar_token=token, is_active=True)
+
+    now_stamp = _dt.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    site = getattr(_settings, "SITE_NAME", "Orman")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Orman//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        _ical_prop("X-WR-CALNAME", _ical_escape(site) + " Calendar"),
+        _ical_prop("X-WR-CALDESC", "Rehearsals and performances"),
+    ]
+
+    for r in models.Rehearsal.objects.select_related("venue").order_by("startDate"):
+        lines += [
+            "BEGIN:VEVENT",
+            _ical_prop("UID", f"rehearsal-{r.id}@orman"),
+            _ical_prop("DTSTAMP", now_stamp),
+            _ical_prop("SUMMARY", _ical_escape(r.name)),
+        ]
+        if r.startTime:
+            lines.append(_ical_prop("DTSTART", _ical_datetime(r.startDate, r.startTime)))
+            if r.endTime:
+                lines.append(_ical_prop("DTEND", _ical_datetime(r.startDate, r.endTime)))
+            else:
+                lines.append("DURATION:PT2H")
+        else:
+            lines.append(_ical_prop("DTSTART;VALUE=DATE", _ical_date(r.startDate)))
+        if r.venue:
+            lines.append(_ical_prop("LOCATION", _ical_escape(r.venue.name)))
+        lines.append("END:VEVENT")
+
+    for p in (models.Performance.objects.filter(published=True)
+              .select_related("venue").order_by("date")):
+        lines += [
+            "BEGIN:VEVENT",
+            _ical_prop("UID", f"performance-{p.id}@orman"),
+            _ical_prop("DTSTAMP", now_stamp),
+            _ical_prop("SUMMARY", _ical_escape(p.name)),
+        ]
+        if p.time:
+            lines.append(_ical_prop("DTSTART", _ical_datetime(p.date, p.time)))
+            lines.append("DURATION:PT2H")
+        else:
+            lines.append(_ical_prop("DTSTART;VALUE=DATE", _ical_date(p.date)))
+        if p.venue:
+            lines.append(_ical_prop("LOCATION", _ical_escape(p.venue.name)))
+        if p.publicDescription:
+            lines.append(_ical_prop("DESCRIPTION", _ical_escape(p.publicDescription)))
+        lines.append("END:VEVENT")
+
+    lines.append("END:VCALENDAR")
+    content = "\r\n".join(lines) + "\r\n"
+    return HttpResponse(content, content_type="text/calendar; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="orman.ics"'})
 
 
 @login_required

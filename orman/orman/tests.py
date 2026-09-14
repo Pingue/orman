@@ -2029,3 +2029,473 @@ class GenerateRehearsalsTimeUpdateTests(TestCase):
         self.series.generate_rehearsals(date(2025, 1, 1))
         created, updated = self.series.generate_rehearsals(date(2025, 1, 1))
         self.assertEqual((created, updated), (0, 0))
+
+
+class CalendarIcsTests(TestCase):
+    """iCal feed returns valid content for the right token."""
+
+    def setUp(self):
+        self.fam = models.InstrumentFamily.objects.create(name="Strings")
+        self.venue = models.Venue.objects.create(name="Town Hall")
+        self.person = models.Person.objects.create_user(
+            email="ical@example.com",
+            password="x",
+            firstNames="Cal",
+            lastName="User",
+        )
+        from datetime import date, time
+        self.rehearsal = models.Rehearsal.objects.create(
+            name="Rehearsal 1",
+            startDate=date(2026, 6, 1),
+            startTime=time(19, 0),
+            endTime=time(21, 0),
+            venue=self.venue,
+        )
+
+    def _url(self):
+        return f"/calendar/{self.person.calendar_token}/events.ics"
+
+    def test_returns_200_and_ical_content_type(self):
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/calendar", resp["Content-Type"])
+
+    def test_contains_rehearsal_summary(self):
+        resp = self.client.get(self._url())
+        self.assertIn(b"SUMMARY:Rehearsal 1", resp.content)
+
+    def test_contains_location(self):
+        resp = self.client.get(self._url())
+        self.assertIn(b"LOCATION:Town Hall", resp.content)
+
+    def test_wrong_token_returns_404(self):
+        import uuid
+        resp = self.client.get(f"/calendar/{uuid.uuid4()}/events.ics")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_unpublished_performance_excluded(self):
+        from datetime import date
+        models.Performance.objects.create(
+            name="Secret Gig", date=date(2026, 7, 1), published=False
+        )
+        resp = self.client.get(self._url())
+        self.assertNotIn(b"Secret Gig", resp.content)
+
+    def test_published_performance_included(self):
+        from datetime import date
+        models.Performance.objects.create(
+            name="Public Concert", date=date(2026, 7, 1), published=True
+        )
+        resp = self.client.get(self._url())
+        self.assertIn(b"Public Concert", resp.content)
+
+
+class PasskeyTests(TestCase):
+    """Tests for passkey registration, authentication, and deletion endpoints."""
+
+    def setUp(self):
+        self.fam = models.InstrumentFamily.objects.create(name="Strings")
+        self.person = models.Person.objects.create_user(
+            email="passkey@example.com",
+            password="x",
+            firstNames="Pass",
+            lastName="Key",
+        )
+        self.other = models.Person.objects.create_user(
+            email="other@example.com",
+            password="x",
+            firstNames="Other",
+            lastName="Person",
+        )
+
+    # ── register_begin ────────────────────────────────────────────────────────
+
+    def test_register_begin_requires_login(self):
+        resp = self.client.get("/auth/passkey/register/begin/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+
+    def test_register_begin_returns_json_options(self):
+        self.client.force_login(self.person)
+        resp = self.client.get("/auth/passkey/register/begin/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("challenge", data)
+        self.assertIn("rp", data)
+        self.assertIn("user", data)
+
+    def test_register_begin_stores_challenge_in_session(self):
+        self.client.force_login(self.person)
+        self.client.get("/auth/passkey/register/begin/")
+        self.assertIn("wn_reg_challenge", self.client.session)
+
+    def test_register_begin_excludes_existing_credentials(self):
+        """excludeCredentials list should contain the user's existing passkeys."""
+        models.Passkey.objects.create(
+            person=self.person,
+            credential_id=b"existing_cred",
+            credential_public_key=b"pk",
+        )
+        self.client.force_login(self.person)
+        resp = self.client.get("/auth/passkey/register/begin/")
+        data = resp.json()
+        self.assertEqual(len(data.get("excludeCredentials", [])), 1)
+
+    # ── register_complete ─────────────────────────────────────────────────────
+
+    def test_register_complete_requires_login(self):
+        import json
+        resp = self.client.post(
+            "/auth/passkey/register/complete/",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+
+    def test_register_complete_rejects_get(self):
+        self.client.force_login(self.person)
+        resp = self.client.get("/auth/passkey/register/complete/")
+        self.assertEqual(resp.status_code, 405)
+
+    def test_register_complete_missing_session_returns_400(self):
+        """No prior register_begin → no session key → 400."""
+        import json
+        self.client.force_login(self.person)
+        resp = self.client.post(
+            "/auth/passkey/register/complete/",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_register_complete_creates_passkey_on_success(self):
+        """Full success path with mocked webauthn verifier."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        self.client.force_login(self.person)
+        session = self.client.session
+        session["wn_reg_challenge"] = "AAAA"  # valid base64url, arbitrary challenge
+        session.save()
+
+        mock_result = MagicMock()
+        mock_result.credential_id = b"cred_id_bytes"
+        mock_result.credential_public_key = b"pubkey_bytes"
+        mock_result.sign_count = 0
+
+        payload = {
+            "id": "Y3JlZF9pZA",
+            "rawId": "Y3JlZF9pZA",
+            "name": "My Passkey",
+            "response": {
+                "clientDataJSON": "AAAA",
+                "attestationObject": "AAAA",
+            },
+        }
+
+        with patch("webauthn.verify_registration_response", return_value=mock_result), \
+             patch("orman.views._parse_reg_credential", return_value=MagicMock()):
+            resp = self.client.post(
+                "/auth/passkey/register/complete/",
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        pk = models.Passkey.objects.get(person=self.person)
+        self.assertEqual(pk.name, "My Passkey")
+        self.assertEqual(bytes(pk.credential_id), b"cred_id_bytes")
+
+    def test_register_complete_uses_default_name_when_blank(self):
+        """Passkey is created with name='Passkey' if the payload omits it."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        self.client.force_login(self.person)
+        session = self.client.session
+        session["wn_reg_challenge"] = "AAAA"
+        session.save()
+
+        mock_result = MagicMock()
+        mock_result.credential_id = b"cred2"
+        mock_result.credential_public_key = b"pk2"
+        mock_result.sign_count = 0
+
+        with patch("webauthn.verify_registration_response", return_value=mock_result), \
+             patch("orman.views._parse_reg_credential", return_value=MagicMock()):
+            self.client.post(
+                "/auth/passkey/register/complete/",
+                data=json.dumps({"id": "AAAA", "rawId": "AAAA",
+                                 "response": {"clientDataJSON": "AAAA",
+                                              "attestationObject": "AAAA"}}),
+                content_type="application/json",
+            )
+
+        pk = models.Passkey.objects.get(person=self.person)
+        self.assertEqual(pk.name, "Passkey")
+
+    def test_register_complete_returns_400_on_verification_error(self):
+        """A failed webauthn verification returns a 400 with an error field."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        self.client.force_login(self.person)
+        session = self.client.session
+        session["wn_reg_challenge"] = "AAAA"
+        session.save()
+
+        with patch("webauthn.verify_registration_response", side_effect=Exception("bad attestation")), \
+             patch("orman.views._parse_reg_credential", return_value=MagicMock()):
+            resp = self.client.post(
+                "/auth/passkey/register/complete/",
+                data=json.dumps({"id": "AAAA", "rawId": "AAAA",
+                                 "response": {"clientDataJSON": "AAAA",
+                                              "attestationObject": "AAAA"}}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("bad attestation", resp.json()["error"])
+
+    def test_register_complete_clears_challenge_from_session(self):
+        """Challenge must be consumed (popped) after one use."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        self.client.force_login(self.person)
+        session = self.client.session
+        session["wn_reg_challenge"] = "AAAA"
+        session.save()
+
+        mock_result = MagicMock()
+        mock_result.credential_id = b"cred3"
+        mock_result.credential_public_key = b"pk3"
+        mock_result.sign_count = 0
+
+        with patch("webauthn.verify_registration_response", return_value=mock_result), \
+             patch("orman.views._parse_reg_credential", return_value=MagicMock()):
+            self.client.post(
+                "/auth/passkey/register/complete/",
+                data=json.dumps({"id": "AAAA", "rawId": "AAAA",
+                                 "response": {"clientDataJSON": "AAAA",
+                                              "attestationObject": "AAAA"}}),
+                content_type="application/json",
+            )
+
+        self.assertNotIn("wn_reg_challenge", self.client.session)
+
+    # ── auth_begin ────────────────────────────────────────────────────────────
+
+    def test_auth_begin_unauthenticated_ok(self):
+        """auth_begin must not require login (anyone can start a passkey flow)."""
+        resp = self.client.get("/auth/passkey/auth/begin/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_auth_begin_returns_json_with_challenge(self):
+        resp = self.client.get("/auth/passkey/auth/begin/")
+        data = resp.json()
+        self.assertIn("challenge", data)
+
+    def test_auth_begin_stores_challenge_in_session(self):
+        self.client.get("/auth/passkey/auth/begin/")
+        self.assertIn("wn_auth_challenge", self.client.session)
+
+    def test_auth_begin_no_allow_credentials(self):
+        """Discoverable flow: allowCredentials must be absent or empty."""
+        resp = self.client.get("/auth/passkey/auth/begin/")
+        data = resp.json()
+        # webauthn library omits or leaves empty for discoverable credentials
+        self.assertEqual(data.get("allowCredentials", []), [])
+
+    # ── auth_complete ─────────────────────────────────────────────────────────
+
+    def test_auth_complete_rejects_get(self):
+        resp = self.client.get("/auth/passkey/auth/complete/")
+        self.assertEqual(resp.status_code, 405)
+
+    def test_auth_complete_missing_session_returns_400(self):
+        import json
+        resp = self.client.post(
+            "/auth/passkey/auth/complete/",
+            data=json.dumps({"rawId": "AAAA"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Session expired", resp.json()["error"])
+
+    def test_auth_complete_unknown_passkey_returns_400(self):
+        """Credential ID not in the DB → 400 Passkey not found."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        session = self.client.session
+        session["wn_auth_challenge"] = "AAAA"
+        session.save()
+
+        with patch("orman.views._parse_auth_credential", return_value=MagicMock()):
+            resp = self.client.post(
+                "/auth/passkey/auth/complete/",
+                data=json.dumps({
+                    "id": "AAAA",
+                    "rawId": "AAAA",   # decodes to b"\x00\x00\x00" — no passkey with that id
+                    "response": {
+                        "clientDataJSON": "AAAA",
+                        "authenticatorData": "AAAA",
+                        "signature": "AAAA",
+                    },
+                }),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Passkey not found", resp.json()["error"])
+
+    def test_auth_complete_logs_in_user_on_success(self):
+        """Successful assertion updates sign_count and logs the user in."""
+        import json
+        from unittest.mock import patch, MagicMock
+        from webauthn.helpers import bytes_to_base64url
+
+        cred_id = b"test_cred_id"
+        passkey = models.Passkey.objects.create(
+            person=self.person,
+            credential_id=cred_id,
+            credential_public_key=b"test_pubkey",
+            sign_count=5,
+        )
+
+        session = self.client.session
+        session["wn_auth_challenge"] = "AAAA"
+        session.save()
+
+        mock_result = MagicMock()
+        mock_result.new_sign_count = 6
+
+        with patch("orman.views._parse_auth_credential", return_value=MagicMock()), \
+             patch("webauthn.verify_authentication_response", return_value=mock_result):
+            resp = self.client.post(
+                "/auth/passkey/auth/complete/",
+                data=json.dumps({
+                    "id": bytes_to_base64url(cred_id),
+                    "rawId": bytes_to_base64url(cred_id),
+                    "response": {
+                        "clientDataJSON": "AAAA",
+                        "authenticatorData": "AAAA",
+                        "signature": "AAAA",
+                    },
+                }),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        # User is now authenticated
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.person.pk)
+        # sign_count and last_used_at were updated
+        passkey.refresh_from_db()
+        self.assertEqual(passkey.sign_count, 6)
+        self.assertIsNotNone(passkey.last_used_at)
+
+    def test_auth_complete_returns_400_on_verification_error(self):
+        """A failed assertion returns 400 with an error field."""
+        import json
+        from unittest.mock import patch, MagicMock
+        from webauthn.helpers import bytes_to_base64url
+
+        cred_id = b"bad_cred"
+        models.Passkey.objects.create(
+            person=self.person,
+            credential_id=cred_id,
+            credential_public_key=b"pk",
+        )
+
+        session = self.client.session
+        session["wn_auth_challenge"] = "AAAA"
+        session.save()
+
+        with patch("orman.views._parse_auth_credential", return_value=MagicMock()), \
+             patch("webauthn.verify_authentication_response",
+                   side_effect=Exception("signature mismatch")):
+            resp = self.client.post(
+                "/auth/passkey/auth/complete/",
+                data=json.dumps({
+                    "id": bytes_to_base64url(cred_id),
+                    "rawId": bytes_to_base64url(cred_id),
+                    "response": {
+                        "clientDataJSON": "AAAA",
+                        "authenticatorData": "AAAA",
+                        "signature": "AAAA",
+                    },
+                }),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("signature mismatch", resp.json()["error"])
+
+    def test_auth_complete_clears_challenge_from_session(self):
+        """Challenge is consumed (popped) whether auth succeeds or fails."""
+        import json
+        from unittest.mock import patch, MagicMock
+
+        session = self.client.session
+        session["wn_auth_challenge"] = "AAAA"
+        session.save()
+
+        with patch("orman.views._parse_auth_credential", return_value=MagicMock()):
+            self.client.post(
+                "/auth/passkey/auth/complete/",
+                data=json.dumps({"id": "AAAA", "rawId": "AAAA",
+                                 "response": {"clientDataJSON": "AAAA",
+                                              "authenticatorData": "AAAA",
+                                              "signature": "AAAA"}}),
+                content_type="application/json",
+            )
+
+        self.assertNotIn("wn_auth_challenge", self.client.session)
+
+    # ── passkey_delete ────────────────────────────────────────────────────────
+
+    def test_delete_requires_login(self):
+        pk = models.Passkey.objects.create(
+            person=self.person, credential_id=b"d1", credential_public_key=b"p1",
+        )
+        resp = self.client.post(f"/auth/passkey/{pk.pk}/delete/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp["Location"])
+
+    def test_delete_requires_post(self):
+        self.client.force_login(self.person)
+        pk = models.Passkey.objects.create(
+            person=self.person, credential_id=b"d2", credential_public_key=b"p2",
+        )
+        resp = self.client.get(f"/auth/passkey/{pk.pk}/delete/")
+        self.assertEqual(resp.status_code, 405)
+
+    def test_delete_own_passkey_succeeds(self):
+        self.client.force_login(self.person)
+        pk = models.Passkey.objects.create(
+            person=self.person, credential_id=b"d3", credential_public_key=b"p3",
+        )
+        resp = self.client.post(f"/auth/passkey/{pk.pk}/delete/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["ok"])
+        self.assertFalse(models.Passkey.objects.filter(pk=pk.pk).exists())
+
+    def test_delete_other_users_passkey_returns_404(self):
+        self.client.force_login(self.person)
+        other_pk = models.Passkey.objects.create(
+            person=self.other, credential_id=b"d4", credential_public_key=b"p4",
+        )
+        resp = self.client.post(f"/auth/passkey/{other_pk.pk}/delete/")
+        self.assertEqual(resp.status_code, 404)
+        # The passkey must still exist
+        self.assertTrue(models.Passkey.objects.filter(pk=other_pk.pk).exists())
+
+    def test_delete_nonexistent_passkey_returns_404(self):
+        self.client.force_login(self.person)
+        resp = self.client.post("/auth/passkey/99999/delete/")
+        self.assertEqual(resp.status_code, 404)

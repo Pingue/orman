@@ -27,6 +27,16 @@ urlpatterns = [
     # Built-in Django auth: login/, logout/, password_change/, etc.
     path("accounts/", include("django.contrib.auth.urls")),
 
+    # Passkeys (WebAuthn).
+    path("auth/passkey/register/begin/", views.passkey_register_begin, name="passkey_register_begin"),
+    path("auth/passkey/register/complete/", views.passkey_register_complete, name="passkey_register_complete"),
+    path("auth/passkey/auth/begin/", views.passkey_auth_begin, name="passkey_auth_begin"),
+    path("auth/passkey/auth/complete/", views.passkey_auth_complete, name="passkey_auth_complete"),
+    path("auth/passkey/<int:passkey_id>/delete/", views.passkey_delete, name="passkey_delete"),
+
+    # iCal feed (no session needed — UUID token is the credential).
+    path("calendar/<uuid:token>/events.ics", views.calendar_ics, name="calendar_ics"),
+
     # Member-facing pages (top-left navbar dropdown).
     path("profile/", views.profile, name="profile"),
     path("announcement/<int:id>/dismiss/", views.dismiss_announcement, name="dismiss_announcement"),

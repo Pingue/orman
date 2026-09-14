@@ -1,3 +1,5 @@
+import uuid as _uuid
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
@@ -40,6 +42,7 @@ class Person(AbstractBaseUser, PermissionsMixin):
     member = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False, verbose_name="admin")
     is_active = models.BooleanField(default=True)
+    calendar_token = models.UUIDField(default=_uuid.uuid4, editable=False)
 
     objects = PersonManager()
 
@@ -423,6 +426,25 @@ class AnnouncementDismissal(models.Model):
                 fields=["announcement", "person"], name="unique_dismissal",
             ),
         ]
+
+
+class Passkey(models.Model):
+    """A WebAuthn passkey registered to a person."""
+    person = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="passkeys",
+    )
+    name = models.CharField(max_length=100, default="Passkey")
+    credential_id = models.BinaryField(unique=True)
+    credential_public_key = models.BinaryField()
+    sign_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.person} — {self.name}"
 
 
 class MailingList(models.Model):

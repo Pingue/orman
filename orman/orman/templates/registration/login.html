@@ -20,6 +20,20 @@
       {% endif %}
     {% endif %}
 
+    <!-- Passkey sign-in -->
+    <button id="passkey-btn" type="button"
+            class="btn btn-outline w-full gap-2 hidden"
+            onclick="signInWithPasskey()">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="8" r="4"/><path d="M16 20v-2a4 4 0 0 0-4-4H4a4 4 0 0 0-4 4v2"/>
+        <line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+      </svg>
+      Sign in with passkey
+    </button>
+
+    <div id="passkey-divider" class="divider text-xs opacity-60 hidden">or</div>
+
     <form method="post" action="{% url 'login' %}" class="space-y-3">
       {% csrf_token %}
 
@@ -30,7 +44,10 @@
       </div>
 
       <div class="form-control">
-        <label class="label" for="id_password"><span class="label-text">Password</span></label>
+        <label class="label" for="id_password">
+          <span class="label-text">Password</span>
+          <a href="{% url 'password_reset' %}" class="label-text-alt link link-hover">Forgot password?</a>
+        </label>
         <input type="password" name="password" id="id_password" required
                class="input input-bordered w-full">
       </div>
@@ -57,5 +74,80 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+(function () {
+  // Show passkey button only if the browser supports WebAuthn
+  if (window.PublicKeyCredential) {
+    document.getElementById('passkey-btn').classList.remove('hidden');
+    document.getElementById('passkey-divider').classList.remove('hidden');
+  }
+})();
+
+function b64urlToBuffer(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4;
+  const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+  return Uint8Array.from(atob(padded), c => c.charCodeAt(0)).buffer;
+}
+function bufferToB64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function getCsrf() {
+  return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+}
+
+async function signInWithPasskey() {
+  const btn = document.getElementById('passkey-btn');
+  btn.disabled = true;
+  btn.textContent = 'Waiting for passkey…';
+  try {
+    const optResp = await fetch('{% url "passkey_auth_begin" %}');
+    if (!optResp.ok) throw new Error('Could not start authentication');
+    const opts = await optResp.json();
+
+    opts.challenge = b64urlToBuffer(opts.challenge);
+    if (opts.allowCredentials) {
+      opts.allowCredentials = opts.allowCredentials.map(c => ({
+        ...c, id: b64urlToBuffer(c.id)
+      }));
+    }
+
+    const cred = await navigator.credentials.get({ publicKey: opts });
+
+    const payload = {
+      id: cred.id,
+      rawId: bufferToB64url(cred.rawId),
+      type: cred.type,
+      response: {
+        clientDataJSON: bufferToB64url(cred.response.clientDataJSON),
+        authenticatorData: bufferToB64url(cred.response.authenticatorData),
+        signature: bufferToB64url(cred.response.signature),
+        userHandle: cred.response.userHandle ? bufferToB64url(cred.response.userHandle) : null,
+      },
+    };
+
+    const verResp = await fetch('{% url "passkey_auth_complete" %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify(payload),
+    });
+    const result = await verResp.json();
+    if (result.ok) {
+      location.href = result.next || '/';
+    } else {
+      alert('Sign-in failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') {
+      alert('Passkey sign-in failed: ' + e.message);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4"/><path d="M16 20v-2a4 4 0 0 0-4-4H4a4 4 0 0 0-4 4v2"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Sign in with passkey`;
+  }
+}
+</script>
 
 {% endblock %}

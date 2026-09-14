@@ -29,35 +29,44 @@
 </head>
 <body class="min-h-screen bg-base-100 text-base-content">
 
-  <div class="navbar bg-base-200 shadow-md">
+  <div class="navbar bg-base-200 shadow-md px-2">
     <div class="navbar-start">
+      <!-- Hamburger — contains all nav links + admin submenu + auth actions on mobile -->
       <details class="dropdown">
-        <summary class="btn btn-ghost"><i class="fas fa-bars"></i></summary>
-        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+        <summary class="btn btn-ghost btn-sm px-2"><i class="fas fa-bars"></i></summary>
+        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-56">
           <li><a href="{% url 'index' %}">Home</a></li>
           <li><a href="{% url 'profile' %}">My profile</a></li>
           <li><a href="{% url 'events' %}">Events</a></li>
           <li><a href="{% url 'music' %}">Music</a></li>
           <li><a href="{% url 'polls' %}">Polls</a></li>
+          <!-- Auth actions — always in hamburger, duplicated in navbar-end on md+ -->
+          {% if user.is_authenticated %}
+            <li class="md:hidden">
+              <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="w-full text-left">Sign out</button>
+              </form>
+            </li>
+          {% else %}
+            <li class="md:hidden"><a href="{% url 'login' %}?next={{ request.path }}">Sign in</a></li>
+          {% endif %}
         </ul>
       </details>
-      <a href="{% url 'index' %}" class="btn btn-ghost normal-case pl-2 pr-3">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -6 248 88" height="28"
+
+      <a href="{% url 'index' %}" class="btn btn-ghost normal-case px-2">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -6 248 88" height="26"
              fill="currentColor" aria-label="Orman" role="img">
           <title>Orman</title>
-          <!-- O: ring (donut) with bass-clef hook + F-clef dots -->
           <path fill-rule="evenodd" d="
             M 40 4 C 61 4 78 21 78 42 C 78 63 61 80 40 80
             C 19 80 2 63 2 42 C 2 21 19 4 40 4 Z
             M 40 16 C 54 16 66 28 66 42 C 66 56 54 68 40 68
             C 26 68 14 56 14 42 C 14 28 26 16 40 16 Z
           "/>
-          <!-- Bass-clef hook: teardrop scroll at upper-right -->
           <path d="M 65 20 C 76 8 80 -2 73 -4 C 66 -6 58 2 62 14 Z"/>
-          <!-- F-clef dots -->
           <circle cx="86" cy="26" r="5.5"/>
           <circle cx="86" cy="50" r="5.5"/>
-          <!-- rman in classical serif -->
           <text x="100" y="60"
                 font-family="'Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif"
                 font-size="56">rman</text>
@@ -65,14 +74,14 @@
       </a>
     </div>
 
-    <div class="navbar-end gap-2">
+    <div class="navbar-end gap-1">
       {% if user.is_authenticated %}
-        <span class="text-sm opacity-70 hidden md:inline">{{ user.firstNames }}</span>
+        <span class="text-sm opacity-60 hidden md:inline mr-1">{{ user.firstNames }}</span>
       {% endif %}
 
-      <!-- Theme switcher -->
+      <!-- Theme switcher — always visible -->
       <details class="dropdown dropdown-end" id="themeMenu">
-        <summary class="btn btn-ghost btn-sm" aria-label="Theme">
+        <summary class="btn btn-ghost btn-sm px-2" aria-label="Theme">
           <i class="fas fa-palette"></i>
         </summary>
         <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-44">
@@ -83,33 +92,36 @@
       </details>
 
       {% if user.is_admin %}
-      <details class="dropdown dropdown-end">
-        <summary class="btn btn-ghost">Admin</summary>
-        <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-          <li><a href="{% url 'admin_person' %}">People</a></li>
-          <li><a href="{% url 'admin_instrument' %}">Instruments</a></li>
-          <li><a href="{% url 'admin_instrument_family' %}">Instrument Families</a></li>
-          <li><a href="{% url 'admin_venue' %}">Venues</a></li>
-          <li><a href="{% url 'admin_music_item' %}">Music</a></li>
-          <li><a href="{% url 'admin_rental_contract' %}">Rentals</a></li>
-          <li><a href="{% url 'admin_rehearsal_series' %}">Rehearsal Series</a></li>
-          <li><a href="{% url 'admin_rehearsal' %}">Rehearsals</a></li>
-          <li><a href="{% url 'admin_performance' %}">Performances</a></li>
-          <li><a href="{% url 'admin_announcement' %}">Announcements</a></li>
-          <li><a href="{% url 'admin_poll' %}">Polls</a></li>
-          <li><a href="{% url 'admin_mailing_list' %}">Mailing Lists</a></li>
-          <li><a href="{% url 'admin_social_apps' %}">Social Auth</a></li>
-        </ul>
-      </details>
+      <div>
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm">Admin</summary>
+          <ul class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+            <li><a href="{% url 'admin_person' %}">People</a></li>
+            <li><a href="{% url 'admin_instrument' %}">Instruments</a></li>
+            <li><a href="{% url 'admin_instrument_family' %}">Instrument Families</a></li>
+            <li><a href="{% url 'admin_venue' %}">Venues</a></li>
+            <li><a href="{% url 'admin_music_item' %}">Music</a></li>
+            <li><a href="{% url 'admin_rental_contract' %}">Rentals</a></li>
+            <li><a href="{% url 'admin_rehearsal_series' %}">Rehearsal Series</a></li>
+            <li><a href="{% url 'admin_rehearsal' %}">Rehearsals</a></li>
+            <li><a href="{% url 'admin_performance' %}">Performances</a></li>
+            <li><a href="{% url 'admin_announcement' %}">Announcements</a></li>
+            <li><a href="{% url 'admin_poll' %}">Polls</a></li>
+            <li><a href="{% url 'admin_mailing_list' %}">Mailing Lists</a></li>
+            <li><a href="{% url 'admin_social_apps' %}">Social Auth</a></li>
+          </ul>
+        </details>
+      </div>
       {% endif %}
 
       {% if user.is_authenticated %}
-        <form method="post" action="{% url 'logout' %}" class="inline">
+        <form method="post" action="{% url 'logout' %}" class="hidden md:inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-ghost btn-sm">Sign out</button>
         </form>
       {% else %}
-        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-ghost btn-sm">Sign in</a>
+        <a href="{% url 'login' %}?next={{ request.path }}"
+           class="hidden md:inline-flex btn btn-ghost btn-sm">Sign in</a>
       {% endif %}
     </div>
   </div>

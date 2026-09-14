@@ -33,4 +33,122 @@
   </div>
 </div>
 
+<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6" id="passkeys-card">
+  <div class="card-body">
+    <h2 class="card-title text-lg">Passkeys</h2>
+    <p class="text-sm opacity-70">
+      Sign in without a password using Face ID, Touch ID, or a hardware security key.
+    </p>
+
+    {% if request.user.passkeys.all %}
+      <ul class="divide-y divide-base-content/10 my-2">
+        {% for pk in request.user.passkeys.all %}
+          <li class="flex items-center justify-between py-2 gap-2">
+            <div>
+              <p class="font-medium text-sm">{{ pk.name }}</p>
+              <p class="text-xs opacity-50">
+                Added {{ pk.created_at|date:"j M Y" }}
+                {% if pk.last_used_at %} · Last used {{ pk.last_used_at|date:"j M Y" }}{% endif %}
+              </p>
+            </div>
+            <button type="button" class="btn btn-xs btn-ghost text-error"
+                    onclick="deletePasskey({{ pk.id }}, '{{ pk.name|escapejs }}')">
+              <i class="fas fa-trash text-xs"></i>
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm opacity-50 italic my-2">No passkeys registered yet.</p>
+    {% endif %}
+
+    <div class="flex items-center gap-2 mt-1">
+      <input type="text" id="passkey-name" placeholder="Name (e.g. iPhone)"
+             class="input input-bordered input-sm flex-1">
+      <button type="button" class="btn btn-sm btn-primary" onclick="registerPasskey()"
+              id="register-passkey-btn">
+        <i class="fas fa-plus mr-1"></i>Add passkey
+      </button>
+    </div>
+    <p id="passkey-status" class="text-xs opacity-60 mt-1 hidden"></p>
+  </div>
+</div>
+
+<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+  <div class="card-body">
+    <h2 class="card-title text-lg">Calendar subscription</h2>
+    <p class="text-sm opacity-70">
+      Add this URL to Google Calendar, Apple Calendar, or Outlook to subscribe to all
+      rehearsals and published performances.
+    </p>
+    <div class="flex items-center gap-2 mt-1">
+      <input id="cal-url" type="text" readonly
+             value="{{ request.scheme }}://{{ request.get_host }}{% url 'calendar_ics' request.user.calendar_token %}"
+             class="input input-bordered input-sm flex-1 font-mono text-xs">
+      <button type="button" class="btn btn-sm btn-ghost"
+              onclick="navigator.clipboard.writeText(document.getElementById('cal-url').value).then(function(){this.textContent='Copied!';}.bind(this))"
+              title="Copy to clipboard">
+        <i class="fas fa-copy"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function b64urlToBuffer(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4;
+  const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+  return Uint8Array.from(atob(padded), c => c.charCodeAt(0)).buffer;
+}
+function bufferToB64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function getCsrf() {
+  return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+}
+
+async function registerPasskey() {
+  if (!window.PublicKeyCredential) { alert('Your browser does not support passkeys.'); return; }
+  const btn = document.getElementById('register-passkey-btn');
+  const status = document.getElementById('passkey-status');
+  btn.disabled = true;
+  status.textContent = 'Waiting for authenticator…';
+  status.classList.remove('hidden');
+  try {
+    const optResp = await fetch('{% url "passkey_register_begin" %}', { headers: { 'X-CSRFToken': getCsrf() } });
+    if (!optResp.ok) throw new Error('Could not start registration');
+    const opts = await optResp.json();
+    opts.challenge = b64urlToBuffer(opts.challenge);
+    opts.user.id = b64urlToBuffer(opts.user.id);
+    if (opts.excludeCredentials) {
+      opts.excludeCredentials = opts.excludeCredentials.map(c => ({ ...c, id: b64urlToBuffer(c.id) }));
+    }
+    const cred = await navigator.credentials.create({ publicKey: opts });
+    const name = document.getElementById('passkey-name').value.trim() || 'Passkey';
+    const payload = {
+      name, id: cred.id, rawId: bufferToB64url(cred.rawId), type: cred.type,
+      response: {
+        clientDataJSON: bufferToB64url(cred.response.clientDataJSON),
+        attestationObject: bufferToB64url(cred.response.attestationObject),
+      },
+    };
+    const verResp = await fetch('{% url "passkey_register_complete" %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+      body: JSON.stringify(payload),
+    });
+    const result = await verResp.json();
+    if (result.ok) { location.reload(); } else { alert('Registration failed: ' + (result.error || 'Unknown error')); }
+  } catch (e) { if (e.name !== 'NotAllowedError') alert('Passkey error: ' + e.message); }
+  finally { btn.disabled = false; status.classList.add('hidden'); }
+}
+
+async function deletePasskey(id, name) {
+  if (!confirm('Remove passkey "' + name + '"?')) return;
+  const resp = await fetch('/auth/passkey/' + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } });
+  if ((await resp.json()).ok) location.reload();
+}
+</script>
 {% endblock %}
