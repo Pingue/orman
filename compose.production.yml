@@ -1,0 +1,67 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certs:/certs
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?ACME_EMAIL is required}
+      - --certificatesresolvers.le.acme.storage=/certs/acme.json
+
+  web:
+    image: ${ORMAN_IMAGE:?ORMAN_IMAGE is required}
+    restart: unless-stopped
+    volumes:
+      - db:/app/db
+      - media:/app/media
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALLOWED_HOSTS: ${DOMAIN:?DOMAIN is required}
+      DEBUG: "False"
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@example.com}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orman.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.orman.entrypoints=websecure"
+      - "traefik.http.routers.orman.tls.certresolver=le"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn orman.wsgi:application
+               --bind 0.0.0.0:8000
+               --workers 2
+               --access-logfile -"
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # If ORMAN_IMAGE is from a private registry (e.g. ghcr.io), supply credentials:
+      # REPO_USER: ${REGISTRY_USER:-}
+      # REPO_PASS: ${REGISTRY_PASS:-}
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+
+volumes:
+  certs:
+  db:
+  media:
