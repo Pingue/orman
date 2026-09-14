@@ -1,3 +1,5 @@
+[![Docker Build & Publish to GitHub Container Registry](https://github.com/Pingue/orman/actions/workflows/docker_build.yml/badge.svg)](https://github.com/Pingue/orman/actions/workflows/docker_build.yml)
+
 # Orchestra Management Software
 
 Tools to assist in running an amateur music society.
