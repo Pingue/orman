@@ -54,7 +54,7 @@
                     {% for value, label in rsvp_choices %}
                       <button type="submit" name="status" value="{{ value }}"
                               class="btn btn-sm join-item
-                                {% if r.my_rsvp and r.my_rsvp.status == value %}btn-primary{% else %}btn-ghost{% endif %}">
+                                {% if r.my_rsvp and r.my_rsvp.status == value %}btn-primary{% else %}btn-outline{% endif %}">
                         {{ label }}
                       </button>
                     {% endfor %}
@@ -135,7 +135,7 @@
                     {% for value, label in rsvp_choices %}
                       <button type="submit" name="status" value="{{ value }}"
                               class="btn btn-sm join-item
-                                {% if p.my_rsvp and p.my_rsvp.status == value %}btn-primary{% else %}btn-ghost{% endif %}">
+                                {% if p.my_rsvp and p.my_rsvp.status == value %}btn-primary{% else %}btn-outline{% endif %}">
                         {{ label }}
                       </button>
                     {% endfor %}
