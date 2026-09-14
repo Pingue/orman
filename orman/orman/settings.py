@@ -33,6 +33,11 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 _trusted = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [h.strip() for h in _trusted.split(",") if h.strip()]
 
+# Trust the X-Forwarded-Proto header set by Traefik so request.scheme is
+# correct (https) and passkey / CSRF origin checks pass.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
 # Social login (django-allauth). Set True and configure SOCIALACCOUNT_PROVIDERS to enable.
 SOCIAL_LOGIN_ENABLED = False
 
