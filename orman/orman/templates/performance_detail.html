@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ performance.name }} | Orman{% endblock %}
+{% block content %}
+
+<div class="max-w-2xl mx-auto space-y-6">
+
+  <div>
+    <a href="{% url 'events' %}" class="text-sm opacity-60 hover:opacity-100">&larr; Events</a>
+    <h1 class="text-2xl font-bold mt-1">{{ performance.name }}</h1>
+    <p class="opacity-70 mt-1">
+      {{ performance.date|date:"l jS F Y" }}
+      {% if performance.time %} &middot; {{ performance.time|time:"H:i" }}{% endif %}
+      {% if performance.venue %} &middot; {{ performance.venue.name }}{% endif %}
+    </p>
+  </div>
+
+  {% if performance.publicDescription %}
+  <div class="prose prose-sm max-w-none opacity-80">
+    {{ performance.publicDescription|linebreaksbr }}
+  </div>
+  {% endif %}
+
+  {% if performance.privateDescription %}
+  <div class="alert alert-info text-sm">
+    <i class="fas fa-lock mr-2 opacity-60"></i>
+    {{ performance.privateDescription|linebreaksbr }}
+  </div>
+  {% endif %}
+
+  {% if items %}
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Programme</h2>
+      <ol class="space-y-2 mt-2">
+        {% for item in items %}
+        <li class="flex items-baseline gap-3">
+          <span class="text-sm opacity-50 w-5 text-right shrink-0">{{ item.order }}</span>
+          <div>
+            <span class="font-medium">{{ item.musicItem.name }}</span>
+            {% if item.musicItem.composer %}
+              <span class="text-sm opacity-60 ml-1">— {{ item.musicItem.composer }}</span>
+            {% endif %}
+            {% if item.start_time %}
+              <span class="text-xs opacity-50 ml-2">{{ item.start_time|time:"H:i" }}</span>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+  {% else %}
+  <p class="opacity-60 italic">No programme set for this performance yet.</p>
+  {% endif %}
+
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Your RSVP</h2>
+      {% if rsvp %}
+        <p>
+          {% if rsvp.status == "yes" %}<span class="badge badge-success">Going</span>
+          {% elif rsvp.status == "maybe" %}<span class="badge badge-warning">Maybe</span>
+          {% else %}<span class="badge badge-error">Not going</span>{% endif %}
+          {% if rsvp.note %}<span class="text-sm opacity-70 ml-2">{{ rsvp.note }}</span>{% endif %}
+        </p>
+      {% else %}
+        <p class="opacity-60 italic text-sm">You haven't RSVPed yet.</p>
+      {% endif %}
+      <div class="card-actions mt-2">
+        <a href="{% url 'events' %}" class="btn btn-sm btn-primary">Update RSVP</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

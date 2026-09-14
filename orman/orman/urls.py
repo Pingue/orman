@@ -43,6 +43,10 @@ urlpatterns = [
     path("events/", views.events, name="events"),
     path("music/", views.music, name="music"),
 
+    # Member-facing event detail pages.
+    path("rehearsal/<int:rehearsal_id>/", views.rehearsal_detail, name="rehearsal_detail"),
+    path("performance/<int:performance_id>/", views.performance_detail, name="performance_detail"),
+
     # RSVP submission. `kind` is "rehearsal" or "performance".
     path("rsvp/<str:kind>/<int:id>/", views.rsvp, name="rsvp"),
 

@@ -367,6 +367,30 @@ def index(request):
 
 
 @login_required
+def rehearsal_detail(request, rehearsal_id):
+    rehearsal = get_object_or_404(models.Rehearsal, pk=rehearsal_id)
+    items = rehearsal.rehearsalitem_set.select_related("musicItem").order_by("order")
+    rsvp = rehearsal.rsvps.filter(person=request.user).first()
+    return render(request, "rehearsal_detail.html", {
+        "rehearsal": rehearsal,
+        "items": items,
+        "rsvp": rsvp,
+    })
+
+
+@login_required
+def performance_detail(request, performance_id):
+    performance = get_object_or_404(models.Performance, pk=performance_id)
+    items = performance.performanceitem_set.select_related("musicItem").order_by("order")
+    rsvp = performance.rsvps.filter(person=request.user).first()
+    return render(request, "performance_detail.html", {
+        "performance": performance,
+        "items": items,
+        "rsvp": rsvp,
+    })
+
+
+@login_required
 def profile(request):
     if request.method == "POST":
         form = forms.ProfileForm(request.POST, instance=request.user)
