@@ -9,6 +9,7 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_PATH: /app/db/db.sqlite3
       DEBUG: ${DEBUG:-False}
       # Email (optional — defaults to console backend if not set)
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}

@@ -30,6 +30,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALLOWED_HOSTS: ${DOMAIN:?DOMAIN is required}
       CSRF_TRUSTED_ORIGINS: https://${DOMAIN}
+      DB_PATH: /app/db/db.sqlite3
       DEBUG: "False"
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:-localhost}
