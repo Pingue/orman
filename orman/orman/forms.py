@@ -230,6 +230,23 @@ class PerformanceForm(_DaisyFormMixin, forms.ModelForm):
         }
 
 
+class SiteContentForm(_DaisyFormMixin, forms.ModelForm):
+    class Meta:
+        model = models.SiteContent
+        fields = ["description", "contactName", "contactEmail", "contactPhone", "contactAddress"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 10}),
+            "contactEmail": forms.EmailInput(),
+            "contactAddress": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class CarouselImageForm(_DaisyFormMixin, forms.ModelForm):
+    class Meta:
+        model = models.CarouselImage
+        fields = ["image", "caption", "order"]
+
+
 class MailingListForm(_DaisyFormMixin, forms.ModelForm):
     class Meta:
         model = models.MailingList

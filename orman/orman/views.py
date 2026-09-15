@@ -344,9 +344,24 @@ def calendar_ics(request, token):
                         headers={"Content-Disposition": 'attachment; filename="orman.ics"'})
 
 
-@login_required
 def index(request):
     today = timezone.localdate()
+
+    if not request.user.is_authenticated:
+        # Public landing page: only ever shows performances the admin has
+        # explicitly published, and never privateDescription.
+        next_performance = (
+            models.Performance.objects
+            .filter(date__gte=today, published=True)
+            .order_by("date", "time")
+            .first()
+        )
+        return render(request, "index.html", {
+            "next_performance": next_performance,
+            "site_content": models.SiteContent.load(),
+            "carousel_images": list(models.CarouselImage.objects.all()),
+        })
+
     next_rehearsal = (
         models.Rehearsal.objects
         .filter(startDate__gte=today)
@@ -1225,6 +1240,42 @@ def admin_poll_responses_table(request, poll_id):
         "questions": questions,
         "rows": rows,
     })
+
+
+@admin_required
+def admin_site_content(request):
+    """Edit the singleton public home page content (description + contact details)."""
+    content = models.SiteContent.load()
+    if request.method == "POST":
+        form = forms.SiteContentForm(request.POST, instance=content)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Home page content updated.")
+            return redirect("admin_site_content")
+    else:
+        form = forms.SiteContentForm(instance=content)
+    return render(request, "admin_site_content.html", {"form": form})
+
+
+@admin_required
+def admin_carousel_image(request, id=None):
+    return crud.crud_view(
+        request,
+        model=models.CarouselImage,
+        form_class=forms.CarouselImageForm,
+        page_title="Carousel Images",
+        columns=[
+            {"label": "Preview", "field": "image"},
+            {"label": "Caption", "field": "caption"},
+            {"label": "Order", "field": "order"},
+        ],
+        list_context_name="carousel_images",
+        list_url_name="admin_carousel_image",
+        form_url_name="admin_carousel_image_form",
+        save_url_name="admin_carousel_image",
+        delete_url_name="admin_carousel_image_delete",
+        id=id,
+    )
 
 
 @admin_required

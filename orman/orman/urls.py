@@ -123,6 +123,13 @@ urlpatterns = [
     path("admin_poll/<int:poll_id>/questions/<int:question_id>/choices/", views.admin_poll_choices, name="admin_poll_choices"),
     path("admin_poll/<int:poll_id>/questions/<int:question_id>/choices/<int:id>", views.admin_poll_choices, name="admin_poll_choices"),
 
+    # Home page content (singleton) + carousel images
+    path("admin_site_content/", views.admin_site_content, name="admin_site_content"),
+    path("admin_carousel_image/", views.admin_carousel_image, name="admin_carousel_image"),
+    path("admin_carousel_image/<int:id>/", views.admin_carousel_image, name="admin_carousel_image"),
+    path("admin_carousel_image/<int:id>/form/", views.admin_carousel_image, name="admin_carousel_image_form"),
+    path("admin_carousel_image/<int:id>/delete/", views.admin_carousel_image, name="admin_carousel_image_delete"),
+
     # Announcement
     path("admin_announcement/", views.admin_announcement, name="admin_announcement"),
     path("admin_announcement/<int:id>/", views.admin_announcement, name="admin_announcement"),
