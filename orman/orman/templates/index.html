@@ -1,5 +1,8 @@
 {% extends "base.html" %}
+{% load orman_extras %}
 {% block content %}
+
+{% if user.is_authenticated %}
 
 <h1 class="text-3xl font-bold mb-6">Orman Music Group Management System</h1>
 
@@ -8,25 +11,18 @@
   <div class="card bg-base-200 border border-base-content/30">
     <div class="card-body">
       <h2 class="card-title">Your profile</h2>
-      {% if user.is_authenticated %}
-        <p>Signed in as <strong>{{ user.get_username }}</strong></p>
-        {% if person %}
-          <p>{{ person.firstNames }} {{ person.lastName }}</p>
-          {% if person.instruments.all %}
-            <p class="text-sm opacity-70">
-              Instruments: {% for i in person.instruments.all %}{{ i.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            </p>
-          {% endif %}
-        {% else %}
-          <p class="text-sm opacity-70 italic">
-            Your account isn't linked to a Person record yet.
+      <p>Signed in as <strong>{{ user.get_username }}</strong></p>
+      {% if person %}
+        <p>{{ person.firstNames }} {{ person.lastName }}</p>
+        {% if person.instruments.all %}
+          <p class="text-sm opacity-70">
+            Instruments: {% for i in person.instruments.all %}{{ i.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
           </p>
         {% endif %}
       {% else %}
-        <p class="opacity-70">You're not signed in.</p>
-        <div class="card-actions mt-2">
-          <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">Sign in</a>
-        </div>
+        <p class="text-sm opacity-70 italic">
+          Your account isn't linked to a Person record yet.
+        </p>
       {% endif %}
     </div>
   </div>
@@ -72,5 +68,80 @@
   </div>
 
 </div>
+
+{% else %}
+
+<div class="space-y-10 max-w-5xl mx-auto">
+
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title">Next performance</h2>
+      {% if next_performance %}
+        <p class="text-xl font-semibold">{{ next_performance.name }}</p>
+        <p class="opacity-70">
+          {{ next_performance.date|date:"l jS F Y" }}
+          {% if next_performance.time %} &middot; {{ next_performance.time|time:"H:i" }}{% endif %}
+          {% if next_performance.venue %} &middot; {{ next_performance.venue.name }}{% endif %}
+        </p>
+        {% if next_performance.publicDescription %}
+          <div class="prose prose-sm max-w-none opacity-80 mt-2">
+            {{ next_performance.publicDescription|linebreaksbr }}
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="opacity-70 italic">No upcoming performances announced yet.</p>
+      {% endif %}
+      <div class="card-actions mt-2">
+        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  {% if carousel_images %}
+  <div class="carousel w-full rounded-box overflow-hidden">
+    {% for img in carousel_images %}
+      <div id="slide{{ forloop.counter }}" class="carousel-item relative w-full">
+        <img src="{{ img.image.url }}" alt="{{ img.caption }}" class="w-full object-cover max-h-96">
+        {% if img.caption %}
+          <div class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-sm px-3 py-1">{{ img.caption }}</div>
+        {% endif %}
+        {% if carousel_images|length > 1 %}
+          <div class="absolute flex justify-between transform -translate-y-1/2 left-3 right-3 top-1/2">
+            <a href="#slide{% if forloop.first %}{{ carousel_images|length }}{% else %}{{ forloop.counter0 }}{% endif %}"
+               class="btn btn-circle btn-sm">&#10094;</a>
+            <a href="#slide{% if forloop.last %}1{% else %}{{ forloop.counter|add:'1' }}{% endif %}"
+               class="btn btn-circle btn-sm">&#10095;</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if site_content.description %}
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body prose max-w-none">
+      {{ site_content.description|markdownify }}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if site_content.contactName or site_content.contactEmail or site_content.contactPhone or site_content.contactAddress %}
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title">Contact us</h2>
+      {% if site_content.contactName %}<p class="font-medium">{{ site_content.contactName }}</p>{% endif %}
+      {% if site_content.contactEmail %}
+        <p><a href="mailto:{{ site_content.contactEmail }}" class="link">{{ site_content.contactEmail }}</a></p>
+      {% endif %}
+      {% if site_content.contactPhone %}<p>{{ site_content.contactPhone }}</p>{% endif %}
+      {% if site_content.contactAddress %}<p class="whitespace-pre-line opacity-80">{{ site_content.contactAddress }}</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{% endif %}
 
 {% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Home Page Content | Orman{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-3xl font-bold">Home Page Content</h1>
+  <a href="{% url 'admin_carousel_image' %}" class="btn btn-sm">Carousel images &rarr;</a>
+</div>
+
+<p class="opacity-70 text-sm mb-6 max-w-2xl">
+  This description and contact information are shown on the public home page,
+  above sign-in, alongside the next published performance and the image carousel.
+</p>
+
+<form method="post" class="max-w-2xl space-y-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-error">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}
+    <div class="form-control w-full">
+      <label class="label" for="{{ field.id_for_label }}">
+        <span class="label-text">{{ field.label }}</span>
+      </label>
+      {{ field }}
+      {% if field.help_text %}
+        <span class="text-xs opacity-70 mt-1">{{ field.help_text }}</span>
+      {% endif %}
+      {% for err in field.errors %}
+        <span class="text-error text-sm mt-1">{{ err }}</span>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  <button type="submit" class="btn btn-primary">Save</button>
+</form>
+
+{% endblock %}

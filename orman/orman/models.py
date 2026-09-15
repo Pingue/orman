@@ -580,3 +580,50 @@ class MailingListMember(models.Model):
 
     def __str__(self):
         return f"{self.person} → {self.mailing_list}"
+
+
+def _carousel_upload_to(instance, filename):
+    """Store uploaded carousel images with a UUID stem to prevent path traversal / enumeration."""
+    import uuid, os
+    ext = os.path.splitext(filename)[1].lower()
+    return f"carousel/{uuid.uuid4().hex}{ext}"
+
+
+class SiteContent(models.Model):
+    """Singleton row holding the admin-editable content shown on the public home page."""
+    description = models.TextField(
+        blank=True, verbose_name="description",
+        help_text="Shown on the public home page. Supports Markdown formatting.",
+    )
+    contactName = models.CharField(max_length=200, blank=True, verbose_name="contact name")
+    contactEmail = models.CharField(max_length=200, blank=True, verbose_name="contact email")
+    contactPhone = models.CharField(max_length=200, blank=True, verbose_name="contact phone")
+    contactAddress = models.TextField(blank=True, verbose_name="contact address")
+
+    class Meta:
+        verbose_name_plural = "site content"
+
+    def __str__(self):
+        return "Home page content"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class CarouselImage(models.Model):
+    """An image shown in the home page carousel, admin-managed."""
+    image = models.ImageField(upload_to=_carousel_upload_to)
+    caption = models.CharField(max_length=200, blank=True)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.caption or f"Image {self.pk}"

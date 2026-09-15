@@ -5,10 +5,11 @@ endpoints. They use Django's test client and an in-memory SQLite db.
 
 Run with:  python manage.py test orman
 """
+import tempfile
 from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from . import models
@@ -568,10 +569,10 @@ class MemberPagesTests(TestCase):
         self.user = _make_user(email="mike@example.com", firstNames="Mike", lastName="Frost")
         self.venue = models.Venue.objects.create(**_venue_kwargs())
 
-    def test_index_redirects_anonymous_to_login(self):
+    def test_index_shows_public_page_for_anonymous(self):
         resp = self.client.get(reverse("index"))
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn("/accounts/login/", resp.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Sign in")
 
     def test_index_shows_next_rehearsal_and_performance(self):
         future = date.today() + timedelta(days=3)
@@ -689,10 +690,155 @@ class MemberPagesTests(TestCase):
         # Logout (POST — Django 4.1+ requires POST).
         resp = self.client.post(reverse("logout"))
         self.assertEqual(resp.status_code, 302)
-        # Back to anonymous — index now redirects to login page.
+        # Back to anonymous — index is public and shows a Sign in link again.
         resp = self.client.get(reverse("index"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Sign in")
+
+
+def _tiny_png(name="test.png"):
+    import io
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(buf, format="PNG")
+    return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
+
+
+class PublicHomePageTests(TestCase):
+    """The unauthenticated home page: next published performance, admin-managed
+    description (Markdown), carousel images, and contact details."""
+
+    def setUp(self):
+        self.venue = models.Venue.objects.create(**_venue_kwargs())
+
+    def test_no_upcoming_performance_shows_placeholder(self):
+        resp = self.client.get(reverse("index"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "No upcoming performances announced yet.")
+
+    def test_shows_next_published_performance_only(self):
+        future = date.today() + timedelta(days=10)
+        models.Performance.objects.create(
+            name="Hidden gala", date=future, venue=self.venue, published=False,
+        )
+        models.Performance.objects.create(
+            name="Spring gala", date=future + timedelta(days=1), venue=self.venue,
+            published=True, publicDescription="Come along!",
+        )
+        resp = self.client.get(reverse("index"))
+        self.assertContains(resp, "Spring gala")
+        self.assertContains(resp, "Come along!")
+        self.assertNotContains(resp, "Hidden gala")
+
+    def test_hides_private_description(self):
+        future = date.today() + timedelta(days=10)
+        models.Performance.objects.create(
+            name="Spring gala", date=future, venue=self.venue, published=True,
+            privateDescription="Members only: bring your own stand.",
+        )
+        resp = self.client.get(reverse("index"))
+        self.assertNotContains(resp, "Members only")
+
+    def test_ignores_past_performances(self):
+        past = date.today() - timedelta(days=1)
+        models.Performance.objects.create(
+            name="Old gala", date=past, venue=self.venue, published=True,
+        )
+        resp = self.client.get(reverse("index"))
+        self.assertNotContains(resp, "Old gala")
+
+    def test_description_rendered_as_markdown(self):
+        content = models.SiteContent.load()
+        content.description = "**Welcome** to our orchestra."
+        content.save()
+        resp = self.client.get(reverse("index"))
+        self.assertContains(resp, "<strong>Welcome</strong>")
+
+    def test_contact_details_shown(self):
+        content = models.SiteContent.load()
+        content.contactName = "Jane Admin"
+        content.contactEmail = "jane@example.org"
+        content.save()
+        resp = self.client.get(reverse("index"))
+        self.assertContains(resp, "Jane Admin")
+        self.assertContains(resp, "jane@example.org")
+
+    def test_carousel_images_shown(self):
+        img = models.CarouselImage.objects.create(image=_tiny_png(), caption="Our last concert")
+        resp = self.client.get(reverse("index"))
+        self.assertContains(resp, "Our last concert")
+        img.image.delete(save=False)
+
+    def test_authenticated_users_still_get_dashboard(self):
+        _make_user(email="mike@example.com")
+        self.client.login(username="mike@example.com", password="secret")
+        resp = self.client.get(reverse("index"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Your profile")
+
+
+class SiteContentAdminTests(TestCase):
+    def test_requires_login(self):
+        resp = self.client.get(reverse("admin_site_content"))
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/accounts/login/", resp.url)
+
+    def test_requires_admin(self):
+        _make_user(email="member@example.com")
+        self.client.login(username="member@example.com", password="secret")
+        resp = self.client.get(reverse("admin_site_content"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_can_update(self):
+        _make_user(email="adm@example.com", is_admin=True)
+        self.client.login(username="adm@example.com", password="secret")
+        resp = self.client.post(reverse("admin_site_content"), {
+            "description": "Hello world",
+            "contactName": "Jane Admin",
+            "contactEmail": "jane@example.org",
+            "contactPhone": "01234 567890",
+            "contactAddress": "1 Music Lane",
+        })
+        self.assertEqual(resp.status_code, 302)
+        content = models.SiteContent.load()
+        self.assertEqual(content.description, "Hello world")
+        self.assertEqual(content.contactName, "Jane Admin")
+
+    def test_is_a_singleton(self):
+        first = models.SiteContent.load()
+        first.description = "First"
+        first.save()
+        second = models.SiteContent.load()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(second.description, "First")
+        self.assertEqual(models.SiteContent.objects.count(), 1)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class CarouselImageCRUDTests(_ModalCRUDMixin, TestCase):
+    """Uploaded test images are written under a throwaway MEDIA_ROOT (not the
+    project's real media/ dir) since the CRUD delete flow doesn't remove
+    files from storage when a row is deleted."""
+
+    list_url_name = "admin_carousel_image"
+    save_url_name = "admin_carousel_image"
+    form_url_name = "admin_carousel_image_form"
+    delete_url_name = "admin_carousel_image_delete"
+    model = models.CarouselImage
+    list_check_text = "Opening night"
+
+    def sample_form_data(self):
+        return {"image": _tiny_png(), "caption": "Opening night", "order": 1}
+
+    def minimal_create_kwargs(self):
+        return {"image": _tiny_png(), "caption": "Old caption", "order": 2}
+
+    def update_form_data(self, obj):
+        return {"image": _tiny_png("updated.png"), "caption": "New caption", "order": 3}
+
+    def assert_updated(self, obj):
+        self.assertEqual(obj.caption, "New caption")
 
 
 class AnnouncementTests(TestCase):
