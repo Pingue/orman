@@ -1,5 +1,5 @@
 # ── Stage 1: build Tailwind CSS ───────────────────────────────────────────────
-FROM node:20-alpine AS node-builder
+FROM node:26-alpine AS node-builder
 
 # Copy the full Django project so Tailwind can scan all templates for classes.
 WORKDIR /app
