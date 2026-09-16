@@ -1,5 +1,5 @@
 Django>=4.2.16,<5.0
-django-allauth[socialaccount]==65.14.3
+django-allauth[socialaccount]==65.19.3
 django-browser-reload==1.12.1
 django-ses>=3.5,<4
 django-tailwind==3.6.0
