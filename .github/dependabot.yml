@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Python dependencies (requirements.txt at the repo root)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # npm dependencies for the active Tailwind theme app
+  - package-ecosystem: "npm"
+    directory: "/orman/theme/static_src"
+    schedule:
+      interval: "weekly"
+
+  # npm dependencies at the repo root
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Dockerfile base image
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Actions used in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
