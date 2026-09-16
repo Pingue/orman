@@ -5,6 +5,7 @@ endpoints. They use Django's test client and an in-memory SQLite db.
 
 Run with:  python manage.py test orman
 """
+import json
 import tempfile
 from datetime import date, time, timedelta
 
@@ -2727,3 +2728,313 @@ class PasskeyTests(TestCase):
         self.client.force_login(self.person)
         resp = self.client.post("/auth/passkey/99999/delete/")
         self.assertEqual(resp.status_code, 404)
+
+
+class MCPServerTests(TestCase):
+    """The /mcp/ JSON-RPC endpoint and its tool set (orman/mcp_server.py)."""
+
+    def setUp(self):
+        self.admin = _make_user(email="admin@example.com", is_admin=True)
+        self.member = _make_user(email="member@example.com")
+        self.venue = models.Venue.objects.create(**_venue_kwargs())
+
+    def _rpc(self, method, params=None, id=1, token=None):
+        if token is None:
+            token = str(self.admin.mcp_token)
+        body = {"jsonrpc": "2.0", "method": method}
+        if id is not None:
+            body["id"] = id
+        if params is not None:
+            body["params"] = params
+        return self.client.post(
+            reverse("mcp_endpoint"),
+            data=json.dumps(body),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+    def _call(self, tool_name, arguments=None, id=1, token=None):
+        return self._rpc("tools/call", {"name": tool_name, "arguments": arguments or {}}, id=id, token=token)
+
+    # ── Auth ─────────────────────────────────────────────────────────────
+
+    def test_missing_auth_header_returns_401(self):
+        resp = self.client.post(
+            reverse("mcp_endpoint"),
+            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_invalid_token_returns_401(self):
+        resp = self._rpc("ping", token="not-a-real-token")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_non_admin_token_returns_403(self):
+        resp = self._rpc("ping", token=str(self.member.mcp_token))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_request_not_allowed(self):
+        resp = self.client.get(reverse("mcp_endpoint"))
+        self.assertEqual(resp.status_code, 405)
+
+    # ── Protocol lifecycle ───────────────────────────────────────────────
+
+    def test_initialize(self):
+        resp = self._rpc("initialize", {"protocolVersion": "2025-06-18"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["id"], 1)
+        self.assertIn("protocolVersion", data["result"])
+        self.assertEqual(data["result"]["serverInfo"]["name"], "orman")
+
+    def test_notification_returns_202_with_empty_body(self):
+        resp = self._rpc("notifications/initialized", id=None)
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.content, b"")
+
+    def test_ping(self):
+        resp = self._rpc("ping")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["result"], {})
+
+    def test_unknown_method_is_jsonrpc_error(self):
+        resp = self._rpc("not/a/real/method")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_invalid_json_body_is_jsonrpc_parse_error(self):
+        resp = self.client.post(
+            reverse("mcp_endpoint"), data="{not json",
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {self.admin.mcp_token}",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    def test_tools_list_includes_expected_tools(self):
+        resp = self._rpc("tools/list")
+        names = {t["name"] for t in resp.json()["result"]["tools"]}
+        for expected in ["orman_list", "orman_get", "orman_create", "orman_update",
+                          "orman_delete", "orman_upcoming_events", "orman_music_parts_set",
+                          "orman_rsvp_set", "orman_set_person_password"]:
+            self.assertIn(expected, names)
+
+    def test_call_unknown_tool_is_jsonrpc_error(self):
+        resp = self._call("orman_not_a_real_tool")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+
+    # ── Generic CRUD ─────────────────────────────────────────────────────
+
+    def test_list_resources(self):
+        resp = self._call("orman_list_resources")
+        result = resp.json()["result"]["structuredContent"]
+        resource_names = {r["resource"] for r in result["resources"]}
+        self.assertIn("venue", resource_names)
+        self.assertIn("performance", resource_names)
+        self.assertNotIn("mailing_list", resource_names)  # secrets excluded
+        self.assertNotIn("social_apps", resource_names)
+
+    def test_venue_crud_roundtrip(self):
+        create = self._call("orman_create", {
+            "resource": "venue",
+            "fields": {"name": "Town Hall", "address": "2 High St"},
+        })
+        created = create.json()["result"]["structuredContent"]
+        self.assertFalse(create.json()["result"]["isError"])
+        self.assertTrue(created["created"])
+        venue_id = created["id"]
+
+        listed = self._call("orman_list", {"resource": "venue"}).json()["result"]["structuredContent"]
+        self.assertTrue(any(r["id"] == venue_id for r in listed["records"]))
+
+        got = self._call("orman_get", {"resource": "venue", "id": venue_id}).json()["result"]["structuredContent"]
+        self.assertEqual(got["name"], "Town Hall")
+
+        updated = self._call("orman_update", {
+            "resource": "venue", "id": venue_id, "fields": {"name": "Renamed Hall"},
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(updated["name"], "Renamed Hall")
+
+        deleted = self._call("orman_delete", {"resource": "venue", "id": venue_id}).json()["result"]
+        self.assertFalse(deleted["isError"])
+
+        missing = self._call("orman_get", {"resource": "venue", "id": venue_id}).json()["result"]
+        self.assertTrue(missing["isError"])
+
+    def test_create_validation_error_is_tool_error_not_protocol_error(self):
+        resp = self._call("orman_create", {"resource": "venue", "fields": {}})  # name required
+        self.assertEqual(resp.status_code, 200)  # protocol-level: fine
+        result = resp.json()["result"]
+        self.assertTrue(result["isError"])
+
+    def test_unknown_resource_is_tool_error(self):
+        resp = self._call("orman_list", {"resource": "not_a_resource"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["result"]["isError"])
+
+    def test_delete_protected_record_is_actionable_tool_error(self):
+        models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        resp = self._call("orman_delete", {"resource": "venue", "id": self.venue.id})
+        result = resp.json()["result"]
+        self.assertTrue(result["isError"])
+        self.assertIn("Rehearsal", result["content"][0]["text"])
+
+    def test_person_password_never_returned(self):
+        got = self._call("orman_get", {"resource": "person", "id": self.admin.id})
+        text = got.json()["result"]["content"][0]["text"]
+        self.assertNotIn("password", text.lower())
+
+    def test_create_person_requires_password(self):
+        resp = self._call("orman_create", {
+            "resource": "person",
+            "fields": {"firstNames": "New", "lastName": "Member", "email": "new@example.com"},
+        })
+        self.assertTrue(resp.json()["result"]["isError"])
+        self.assertFalse(models.Person.objects.filter(email="new@example.com").exists())
+
+    def test_create_person_with_password_can_log_in(self):
+        resp = self._call("orman_create", {
+            "resource": "person",
+            "fields": {
+                "firstNames": "New", "lastName": "Member",
+                "email": "new@example.com", "password": "correct-horse-battery",
+            },
+        })
+        self.assertFalse(resp.json()["result"]["isError"])
+        person = models.Person.objects.get(email="new@example.com")
+        self.assertTrue(person.check_password("correct-horse-battery"))
+
+    def test_update_cannot_set_password_directly(self):
+        resp = self._call("orman_update", {
+            "resource": "person", "id": self.member.id, "fields": {"password": "hacked"},
+        })
+        self.assertTrue(resp.json()["result"]["isError"])
+
+    def test_set_person_password_tool(self):
+        resp = self._call("orman_set_person_password", {
+            "person_id": self.member.id, "password": "new-secret-password",
+        })
+        self.assertFalse(resp.json()["result"]["isError"])
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.check_password("new-secret-password"))
+
+    # ── Workflow tools ───────────────────────────────────────────────────
+
+    def test_upcoming_events(self):
+        future = date.today() + timedelta(days=3)
+        models.Rehearsal.objects.create(name="Weekly", startDate=future, venue=self.venue)
+        models.Performance.objects.create(name="Gala", date=future, venue=self.venue, published=True)
+        result = self._call("orman_upcoming_events").json()["result"]["structuredContent"]
+        self.assertEqual(len(result["rehearsals"]), 1)
+        self.assertEqual(len(result["performances"]), 1)
+
+    def test_music_parts_set_list_delete_supports_score_and_instrument_together(self):
+        item = models.MusicItem.objects.create(name="Symphony")
+        fam = models.InstrumentFamily.objects.create(name="Strings")
+        violin = models.Instrument.objects.create(name="Violin", family=fam)
+
+        created = self._call("orman_music_parts_set", {
+            "music_item_id": item.id, "is_score": True, "instrument_ids": [violin.id],
+            "external_link": "example.com/combined.pdf",
+        }).json()["result"]["structuredContent"]
+        self.assertIn("Full score", created["label"])
+        self.assertIn("Violin", created["label"])
+
+        listed = self._call("orman_music_parts_list", {"music_item_id": item.id}).json()["result"]["structuredContent"]
+        self.assertEqual(len(listed["parts"]), 1)
+        self.assertEqual(listed["parts"][0]["external_link"], "https://example.com/combined.pdf")
+
+        deleted = self._call("orman_music_parts_delete", {
+            "music_item_id": item.id, "part_id": created["id"],
+        }).json()["result"]
+        self.assertFalse(deleted["isError"])
+
+    def test_music_parts_set_requires_score_or_instrument(self):
+        item = models.MusicItem.objects.create(name="Symphony")
+        resp = self._call("orman_music_parts_set", {"music_item_id": item.id, "external_link": "x.com"})
+        self.assertTrue(resp.json()["result"]["isError"])
+
+    def test_repertoire_set_list_delete(self):
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        item = models.MusicItem.objects.create(name="Overture")
+
+        created = self._call("orman_repertoire_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id,
+            "music_item_id": item.id, "order": 1, "start_time": "19:30",
+        }).json()["result"]["structuredContent"]
+
+        listed = self._call("orman_repertoire_list", {
+            "event_type": "rehearsal", "event_id": rehearsal.id,
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(len(listed["items"]), 1)
+        self.assertEqual(listed["items"][0]["music_item"], "Overture")
+        self.assertEqual(listed["items"][0]["start_time"], "19:30:00")
+
+        deleted = self._call("orman_repertoire_delete", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "item_id": created["id"],
+        }).json()["result"]
+        self.assertFalse(deleted["isError"])
+
+    def test_rsvp_set_filters_to_persons_own_instruments(self):
+        fam = models.InstrumentFamily.objects.create(name="Strings")
+        violin = models.Instrument.objects.create(name="Violin", family=fam)
+        viola = models.Instrument.objects.create(name="Viola", family=fam)
+        self.member.instruments.add(violin)  # member does NOT play viola
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+
+        resp = self._call("orman_rsvp_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "person_id": self.member.id,
+            "status": "yes", "playing_instrument_ids": [violin.id, viola.id],
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(resp["status"], "yes")
+
+        listed = self._call("orman_rsvp_list", {
+            "event_type": "rehearsal", "event_id": rehearsal.id,
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(listed["rsvps"][0]["playing_instruments"], ["Violin"])
+
+    def test_rsvp_set_rejects_invalid_status(self):
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        resp = self._call("orman_rsvp_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id,
+            "person_id": self.member.id, "status": "definitely-not-a-status",
+        })
+        self.assertTrue(resp.json()["result"]["isError"])
+
+
+class MCPTokenTests(TestCase):
+    def test_new_users_get_distinct_tokens(self):
+        a = _make_user(email="a@example.com")
+        b = _make_user(email="b@example.com")
+        self.assertIsNotNone(a.mcp_token)
+        self.assertNotEqual(a.mcp_token, b.mcp_token)
+
+    def test_regenerate_requires_admin(self):
+        _make_user(email="member@example.com")
+        self.client.login(username="member@example.com", password="secret")
+        resp = self.client.post(reverse("admin_regenerate_mcp_token"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_regenerate_rotates_token(self):
+        admin = _make_user(email="admin@example.com", is_admin=True)
+        self.client.login(username="admin@example.com", password="secret")
+        old_token = admin.mcp_token
+        resp = self.client.post(reverse("admin_regenerate_mcp_token"))
+        self.assertEqual(resp.status_code, 302)
+        admin.refresh_from_db()
+        self.assertNotEqual(admin.mcp_token, old_token)
+
+    def test_old_token_stops_working_after_regenerate(self):
+        admin = _make_user(email="admin@example.com", is_admin=True)
+        old_token = str(admin.mcp_token)
+        self.client.login(username="admin@example.com", password="secret")
+        self.client.post(reverse("admin_regenerate_mcp_token"))
+        resp = self.client.post(
+            reverse("mcp_endpoint"),
+            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {old_token}",
+        )
+        self.assertEqual(resp.status_code, 401)

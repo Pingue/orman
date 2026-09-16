@@ -37,9 +37,13 @@ urlpatterns = [
     # iCal feed (no session needed — UUID token is the credential).
     path("calendar/<uuid:token>/events.ics", views.calendar_ics, name="calendar_ics"),
 
+    # MCP server (bearer-token authenticated — see mcp_server.py).
+    path("mcp/", views.mcp_endpoint, name="mcp_endpoint"),
+
     # Member-facing pages (top-left navbar dropdown).
     path("profile/", views.profile, name="profile"),
     path("announcement/<int:id>/dismiss/", views.dismiss_announcement, name="dismiss_announcement"),
+    path("admin_regenerate_mcp_token/", views.admin_regenerate_mcp_token, name="admin_regenerate_mcp_token"),
     path("events/", views.events, name="events"),
     path("music/", views.music, name="music"),
 

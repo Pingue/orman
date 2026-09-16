@@ -1,13 +1,16 @@
+import json
+
 from django.contrib import messages
 from functools import wraps
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 
@@ -24,7 +27,7 @@ def admin_required(view_func):
 
 from django.conf import settings as _settings
 from django.contrib.auth import login as _auth_login
-from . import crud, forms, models
+from . import crud, forms, mcp_server, models
 
 # ── iCal helpers ────────────────────────────────────────────────────────────
 
@@ -277,6 +280,65 @@ def passkey_delete(request, passkey_id):
     return JsonResponse({"ok": True})
 
 
+@csrf_exempt
+@require_POST
+def mcp_endpoint(request):
+    """MCP (Model Context Protocol) JSON-RPC endpoint — see mcp_server.py.
+
+    Authenticated by `Authorization: Bearer <mcp_token>` rather than a
+    session, so it's CSRF-exempt like any other bearer-token API (there's
+    no cookie for a third-party site to ride along with).
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return JsonResponse(
+            {"error": "Missing or invalid Authorization header. Expected 'Bearer <token>'."},
+            status=401, headers={"WWW-Authenticate": 'Bearer realm="orman-mcp"'},
+        )
+    token = auth[len("Bearer "):].strip()
+    try:
+        person = models.Person.objects.get(mcp_token=token, is_active=True)
+    except (models.Person.DoesNotExist, ValueError, ValidationError):
+        return JsonResponse(
+            {"error": "Invalid or revoked token."},
+            status=401, headers={"WWW-Authenticate": 'Bearer realm="orman-mcp"'},
+        )
+    if not person.is_admin:
+        return JsonResponse({"error": "This account no longer has admin access."}, status=403)
+
+    accept = request.headers.get("Accept", "")
+    if accept and "application/json" not in accept and "*/*" not in accept:
+        return JsonResponse({"error": "Client must accept application/json."}, status=406)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse(
+            {"jsonrpc": "2.0", "id": None, "error": {"code": mcp_server.PARSE_ERROR, "message": "Invalid JSON."}},
+            status=400,
+        )
+
+    try:
+        response = mcp_server.handle_message(body, person)
+    except mcp_server.JsonRpcError as e:
+        msg_id = body.get("id") if isinstance(body, dict) else None
+        return JsonResponse(
+            {"jsonrpc": "2.0", "id": msg_id, "error": {"code": e.code, "message": e.message}},
+            status=400,
+        )
+    except Exception as e:
+        msg_id = body.get("id") if isinstance(body, dict) else None
+        return JsonResponse(
+            {"jsonrpc": "2.0", "id": msg_id,
+             "error": {"code": mcp_server.INTERNAL_ERROR, "message": f"Internal error: {e}"}},
+            status=500,
+        )
+
+    if response is None:
+        return HttpResponse(status=202)  # notification — no reply body
+    return JsonResponse(response)
+
+
 def calendar_ics(request, token):
     """Return an iCal feed for all rehearsals and published performances.
 
@@ -416,6 +478,17 @@ def profile(request):
     else:
         form = forms.ProfileForm(instance=request.user)
     return render(request, "profile.html", {"person": request.user, "form": form})
+
+
+@admin_required
+@require_POST
+def admin_regenerate_mcp_token(request):
+    """Rotate the current user's MCP API token, invalidating the old one."""
+    import uuid as _uuid
+    request.user.mcp_token = _uuid.uuid4()
+    request.user.save(update_fields=["mcp_token"])
+    messages.success(request, "MCP token regenerated. The old token no longer works.")
+    return redirect("profile")
 
 
 @login_required

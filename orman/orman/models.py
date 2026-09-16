@@ -43,6 +43,11 @@ class Person(AbstractBaseUser, PermissionsMixin):
     is_admin = models.BooleanField(default=False, verbose_name="admin")
     is_active = models.BooleanField(default=True)
     calendar_token = models.UUIDField(default=_uuid.uuid4, editable=False)
+    mcp_token = models.UUIDField(
+        default=_uuid.uuid4, editable=False, null=True, blank=True,
+        verbose_name="MCP API token",
+        help_text="Bearer token for the /mcp/ endpoint. Only grants access while the account is an admin.",
+    )
 
     objects = PersonManager()
 
