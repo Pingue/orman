@@ -841,6 +841,28 @@ class CarouselImageCRUDTests(_ModalCRUDMixin, TestCase):
         self.assertEqual(obj.caption, "New caption")
 
 
+class MediaServingTests(TestCase):
+    """Regression test for a production bug: django.conf.urls.static.static()
+    only registers a route when DEBUG=True, so with DEBUG=False (as set in
+    compose.production.yml) every uploaded file — carousel images, music
+    parts, scores — 404ed. orman/urls.py now serves MEDIA_URL unconditionally.
+
+    Deliberately doesn't override MEDIA_ROOT: the URL pattern's document_root
+    is bound to the real settings.MEDIA_ROOT at urls.py import time (same as
+    the static() helper it replaces), so an override_settings(MEDIA_ROOT=...)
+    applied after urlpatterns is built wouldn't reach it anyway.
+    """
+
+    def test_uploaded_file_served_with_debug_false(self):
+        img = models.CarouselImage.objects.create(image=_tiny_png(), caption="x")
+        try:
+            with override_settings(DEBUG=False):
+                resp = self.client.get(img.image.url)
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            img.image.delete(save=False)
+
+
 class AnnouncementTests(TestCase):
     """Site-wide banner system."""
 
