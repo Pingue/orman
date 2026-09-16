@@ -10,9 +10,9 @@ sharing a single view function:
     /admin_<thing>/<id>/delete/      delete (POST)
 """
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
+from django.views.static import serve as _serve_media
 from . import views
 
 _social_urls = [
@@ -159,4 +159,13 @@ urlpatterns = [
     path("admin_social_apps/<int:id>/delete/", views.admin_social_apps, name="admin_social_apps_delete"),
 
     path("", views.index, name="index"),
-] + _social_urls + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + _social_urls + [
+    # Serve uploaded media (scores, parts, carousel images) ourselves — this is
+    # a single-container deployment with no separate media server/CDN in
+    # front of it, and Django's static.static() helper is a DEBUG-only no-op
+    # so it silently 404s everything under MEDIA_URL in production.
+    # settings.MEDIA_URL always comes back with a leading slash (Django adds a
+    # script prefix), but path() patterns are already root-relative, so strip
+    # it — same as static() does internally via prefix.lstrip("/").
+    path(f"{settings.MEDIA_URL.lstrip('/')}<path:path>", _serve_media, {"document_root": settings.MEDIA_ROOT}),
+]

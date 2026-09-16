@@ -841,6 +841,28 @@ class CarouselImageCRUDTests(_ModalCRUDMixin, TestCase):
         self.assertEqual(obj.caption, "New caption")
 
 
+class MediaServingTests(TestCase):
+    """Regression test for a production bug: django.conf.urls.static.static()
+    only registers a route when DEBUG=True, so with DEBUG=False (as set in
+    compose.production.yml) every uploaded file — carousel images, music
+    parts, scores — 404ed. orman/urls.py now serves MEDIA_URL unconditionally.
+
+    Deliberately doesn't override MEDIA_ROOT: the URL pattern's document_root
+    is bound to the real settings.MEDIA_ROOT at urls.py import time (same as
+    the static() helper it replaces), so an override_settings(MEDIA_ROOT=...)
+    applied after urlpatterns is built wouldn't reach it anyway.
+    """
+
+    def test_uploaded_file_served_with_debug_false(self):
+        img = models.CarouselImage.objects.create(image=_tiny_png(), caption="x")
+        try:
+            with override_settings(DEBUG=False):
+                resp = self.client.get(img.image.url)
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            img.image.delete(save=False)
+
+
 class AnnouncementTests(TestCase):
     """Site-wide banner system."""
 
@@ -1394,22 +1416,28 @@ class AttendanceBreakdownTests(TestCase):
 
 
 class MusicItemFileTests(TestCase):
-    """MusicItem score_file and external_link fields on member-facing music page."""
+    """The full score is just a MusicItemPart with is_score=True — shown on
+    the member-facing music page the same way as any other part."""
 
     def setUp(self):
         self.user = _make_user(email="member@example.com")
         self.client.login(username="member@example.com", password="secret")
 
-    def test_music_page_shows_download_link_for_file(self):
+    def test_music_page_shows_download_link_for_score_file(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         f = SimpleUploadedFile("score.pdf", b"PDF", content_type="application/pdf")
-        item = models.MusicItem.objects.create(name="Symphony No 1", score_file=f)
+        item = models.MusicItem.objects.create(name="Symphony No 1")
+        part = models.MusicItemPart.objects.create(musicItem=item, is_score=True, file=f)
         resp = self.client.get(reverse("music"))
         self.assertContains(resp, "Download")
-        item.score_file.delete(save=False)
+        self.assertContains(resp, "Full score")
+        part.file.delete(save=False)
 
-    def test_music_page_shows_open_link_for_external(self):
-        models.MusicItem.objects.create(name="Overture", external_link="https://imslp.org/test")
+    def test_music_page_shows_open_link_for_external_score(self):
+        item = models.MusicItem.objects.create(name="Overture")
+        models.MusicItemPart.objects.create(
+            musicItem=item, is_score=True, external_link="https://imslp.org/test",
+        )
         resp = self.client.get(reverse("music"))
         self.assertContains(resp, "Open")
         self.assertContains(resp, "https://imslp.org/test")
@@ -1418,22 +1446,6 @@ class MusicItemFileTests(TestCase):
         models.MusicItem.objects.create(name="Nocturne")
         resp = self.client.get(reverse("music"))
         self.assertEqual(resp.status_code, 200)
-
-    def test_admin_create_with_external_link(self):
-        admin = _make_user(email="adm@example.com", is_admin=True)
-        self.client.login(username="adm@example.com", password="secret")
-        resp = self.client.post(reverse("admin_music_item"), {
-            "name": "Waltz",
-            "composer": "",
-            "duration": "",
-            "notes": "",
-            "external_link": "https://example.com/score",
-        })
-        self.assertEqual(resp.status_code, 302)
-        self.assertTrue(models.MusicItem.objects.filter(
-            name="Waltz", external_link="https://example.com/score",
-        ).exists())
-        _ = admin
 
 
 class RehearsalSeriesTests(TestCase):
@@ -1603,7 +1615,9 @@ class RepertoireEditorTests(TestCase):
 
 
 class MusicItemPartsTests(TestCase):
-    """Inline XHR parts editor for MusicItem."""
+    """Inline XHR parts editor for MusicItem — the score lives here too, as an
+    always-available 'is Score' option alongside instruments, and a single
+    file/link can be assigned to several instruments (and/or the score) at once."""
 
     def setUp(self):
         self.admin = _make_user(email="admin@example.com", is_admin=True)
@@ -1611,40 +1625,108 @@ class MusicItemPartsTests(TestCase):
         self.music = models.MusicItem.objects.create(name="Symphony No 5")
         fam = models.InstrumentFamily.objects.create(name="Strings")
         self.violin = models.Instrument.objects.create(name="Violin", family=fam)
+        self.viola = models.Instrument.objects.create(name="Viola", family=fam)
 
     def test_parts_page_loads(self):
         resp = self.client.get(reverse("admin_music_item_parts", args=[self.music.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Symphony No 5")
         self.assertContains(resp, "Violin")
+        self.assertContains(resp, "Score")
 
     def test_add_part(self):
         url = reverse("admin_music_item_parts", args=[self.music.id]) + "0"
-        resp = self.client.post(url, {"instrument_id": self.violin.id,
+        resp = self.client.post(url, {"instrument_ids": [self.violin.id],
                                       "external_link": "https://example.com/violin.pdf"})
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(models.MusicItemPart.objects.filter(musicItem=self.music, instrument=self.violin).exists())
+        part = models.MusicItemPart.objects.get(musicItem=self.music)
+        self.assertEqual(list(part.instruments.all()), [self.violin])
+        self.assertFalse(part.is_score)
+
+    def test_add_score_part(self):
+        """The score is just another part — is_score=True, no instrument required."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        url = reverse("admin_music_item_parts", args=[self.music.id]) + "0"
+        f = SimpleUploadedFile("score.pdf", b"PDF", content_type="application/pdf")
+        resp = self.client.post(url, {"is_score": "1", "file": f})
+        self.assertEqual(resp.status_code, 200)
+        part = models.MusicItemPart.objects.get(musicItem=self.music)
+        self.assertTrue(part.is_score)
+        self.assertEqual(part.instruments.count(), 0)
+        self.assertEqual(part.label, "Full score")
+
+    def test_add_part_can_cover_score_and_multiple_instruments(self):
+        """One upload can cover the score and several instruments at once,
+        so there's no need to upload the same file more than once."""
+        url = reverse("admin_music_item_parts", args=[self.music.id]) + "0"
+        resp = self.client.post(url, {
+            "is_score": "1",
+            "instrument_ids": [self.violin.id, self.viola.id],
+            "external_link": "https://example.com/combined.pdf",
+        })
+        self.assertEqual(resp.status_code, 200)
+        part = models.MusicItemPart.objects.get(musicItem=self.music)
+        self.assertTrue(part.is_score)
+        self.assertEqual(set(part.instruments.all()), {self.violin, self.viola})
+
+    def test_add_part_requires_score_or_instrument(self):
+        url = reverse("admin_music_item_parts", args=[self.music.id]) + "0"
+        resp = self.client.post(url, {"external_link": "https://example.com/x.pdf"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(models.MusicItemPart.objects.filter(musicItem=self.music).exists())
 
     def test_update_part_external_link(self):
-        """Updating a part's external_link persists correctly."""
-        part = models.MusicItemPart.objects.create(musicItem=self.music, instrument=self.violin)
+        """Updating a part's external_link persists correctly (keeping its assignment)."""
+        part = models.MusicItemPart.objects.create(musicItem=self.music)
+        part.instruments.add(self.violin)
         url = reverse("admin_music_item_parts", args=[self.music.id]) + str(part.id)
-        resp = self.client.post(url, {"external_link": "https://example.com/part.pdf"})
+        resp = self.client.post(url, {
+            "instrument_ids": [self.violin.id],
+            "external_link": "https://example.com/part.pdf",
+        })
         self.assertEqual(resp.status_code, 200)
         part.refresh_from_db()
         self.assertEqual(part.external_link, "https://example.com/part.pdf")
+        self.assertEqual(list(part.instruments.all()), [self.violin])
+
+    def test_update_part_can_change_assignment(self):
+        """Editing a part can add the score flag and/or more instruments."""
+        part = models.MusicItemPart.objects.create(musicItem=self.music)
+        part.instruments.add(self.violin)
+        url = reverse("admin_music_item_parts", args=[self.music.id]) + str(part.id)
+        resp = self.client.post(url, {
+            "is_score": "1",
+            "instrument_ids": [self.violin.id, self.viola.id],
+        })
+        self.assertEqual(resp.status_code, 200)
+        part.refresh_from_db()
+        self.assertTrue(part.is_score)
+        self.assertEqual(set(part.instruments.all()), {self.violin, self.viola})
 
     def test_update_part_rejected_bad_extension(self):
         """Uploading a disallowed file type returns 400."""
         from django.core.files.uploadedfile import SimpleUploadedFile
-        part = models.MusicItemPart.objects.create(musicItem=self.music, instrument=self.violin)
+        part = models.MusicItemPart.objects.create(musicItem=self.music)
+        part.instruments.add(self.violin)
         url = reverse("admin_music_item_parts", args=[self.music.id]) + str(part.id)
         bad_file = SimpleUploadedFile("malicious.exe", b"MZ", content_type="application/x-msdownload")
         resp = self.client.post(url, {"file": bad_file})
         self.assertEqual(resp.status_code, 400)
 
+    def test_clear_file_does_not_require_assignment(self):
+        """Clearing a file is a minimal action — it shouldn't need the checklist resent."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        f = SimpleUploadedFile("score.pdf", b"PDF", content_type="application/pdf")
+        part = models.MusicItemPart.objects.create(musicItem=self.music, is_score=True, file=f)
+        url = reverse("admin_music_item_parts", args=[self.music.id]) + str(part.id)
+        resp = self.client.post(url, {"clear_file": "1"})
+        self.assertEqual(resp.status_code, 200)
+        part.refresh_from_db()
+        self.assertFalse(part.file)
+
     def test_delete_part(self):
-        part = models.MusicItemPart.objects.create(musicItem=self.music, instrument=self.violin)
+        part = models.MusicItemPart.objects.create(musicItem=self.music)
+        part.instruments.add(self.violin)
         url = reverse("admin_music_item_parts", args=[self.music.id]) + str(part.id)
         resp = self.client.delete(url)
         self.assertEqual(resp.status_code, 200)

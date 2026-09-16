@@ -73,30 +73,6 @@
 
 <div class="space-y-10 max-w-5xl mx-auto">
 
-  <div class="card bg-base-200 border border-base-content/30">
-    <div class="card-body">
-      <h2 class="card-title">Next performance</h2>
-      {% if next_performance %}
-        <p class="text-xl font-semibold">{{ next_performance.name }}</p>
-        <p class="opacity-70">
-          {{ next_performance.date|date:"l jS F Y" }}
-          {% if next_performance.time %} &middot; {{ next_performance.time|time:"H:i" }}{% endif %}
-          {% if next_performance.venue %} &middot; {{ next_performance.venue.name }}{% endif %}
-        </p>
-        {% if next_performance.publicDescription %}
-          <div class="prose prose-sm max-w-none opacity-80 mt-2">
-            {{ next_performance.publicDescription|linebreaksbr }}
-          </div>
-        {% endif %}
-      {% else %}
-        <p class="opacity-70 italic">No upcoming performances announced yet.</p>
-      {% endif %}
-      <div class="card-actions mt-2">
-        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">Sign in</a>
-      </div>
-    </div>
-  </div>
-
   {% if carousel_images %}
   <div class="carousel w-full rounded-box overflow-hidden">
     {% for img in carousel_images %}
@@ -125,6 +101,30 @@
     </div>
   </div>
   {% endif %}
+
+  <div class="card bg-base-200 border border-base-content/30">
+    <div class="card-body">
+      <h2 class="card-title">Next performance</h2>
+      {% if next_performance %}
+        <p class="text-xl font-semibold">{{ next_performance.name }}</p>
+        <p class="opacity-70">
+          {{ next_performance.date|date:"l jS F Y" }}
+          {% if next_performance.time %} &middot; {{ next_performance.time|time:"H:i" }}{% endif %}
+          {% if next_performance.venue %} &middot; {{ next_performance.venue.name }}{% endif %}
+        </p>
+        {% if next_performance.publicDescription %}
+          <div class="prose prose-sm max-w-none opacity-80 mt-2">
+            {{ next_performance.publicDescription|linebreaksbr }}
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="opacity-70 italic">No upcoming performances announced yet.</p>
+      {% endif %}
+      <div class="card-actions mt-2">
+        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary btn-sm">Sign in</a>
+      </div>
+    </div>
+  </div>
 
   {% if site_content.contactName or site_content.contactEmail or site_content.contactPhone or site_content.contactAddress %}
   <div class="card bg-base-200 border border-base-content/30">
