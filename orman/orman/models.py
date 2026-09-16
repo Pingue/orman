@@ -81,11 +81,8 @@ class MusicItem(models.Model):
     name = models.CharField(max_length=200)
     composer = models.CharField(max_length=200, blank=True)
     duration = models.DurationField(blank=True, null=True)
-    parts = models.ManyToManyField(Instrument, through='MusicItemPart')
     notes = models.TextField(blank=True)
     contract = models.ForeignKey(RentalContract, on_delete=models.PROTECT, blank=True, null=True)
-    score_file = models.FileField(upload_to="scores/", blank=True, null=True, verbose_name="score file")
-    external_link = models.URLField(blank=True, verbose_name="external link")
     def __str__(self):
         return self.name
 
@@ -97,16 +94,27 @@ def _part_upload_to(instance, filename):
 
 
 class MusicItemPart(models.Model):
+    """A single uploaded file or link for a MusicItem, assignable to the full
+    score and/or one or more instruments — e.g. one file can cover both the
+    score and percussion, instead of needing a duplicate upload."""
     musicItem = models.ForeignKey(MusicItem, on_delete=models.PROTECT)
-    instrument = models.ForeignKey(Instrument, on_delete=models.PROTECT)
+    instruments = models.ManyToManyField(Instrument, blank=True, related_name="music_item_parts")
+    is_score = models.BooleanField(default=False, verbose_name="full score")
     file = models.FileField(upload_to=_part_upload_to, blank=True, null=True, verbose_name="file upload")
     external_link = models.URLField(blank=True, verbose_name="external link")
 
     class Meta:
-        ordering = ["instrument__name"]
+        ordering = ["-is_score", "id"]
+
+    @property
+    def label(self):
+        names = [str(i) for i in self.instruments.all()]
+        if self.is_score:
+            return "Full score" if not names else "Full score + " + ", ".join(names)
+        return ", ".join(names) if names else "Untitled part"
 
     def __str__(self):
-        return self.musicItem.name + " - " + self.instrument.name
+        return self.musicItem.name + " - " + self.label
 
 class RehearsalSeries(models.Model):
     FREQ_WEEKLY = "weekly"

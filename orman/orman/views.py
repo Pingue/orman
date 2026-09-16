@@ -516,20 +516,29 @@ def rsvp(request, kind, id):
 
 @login_required
 def music(request):
-    """All MusicItems in the library, ordered by name. Includes parts split by the user's instruments."""
+    """All MusicItems in the library, ordered by name. Includes parts split by the user's instruments.
+
+    A part can be assigned to the full score and/or several instruments (e.g.
+    one file covering both Score and Percussion), so "my parts" is anything
+    whose instrument set overlaps the member's own instruments — a
+    score-only part (no instruments) never matches and stays under "other".
+    """
     from django.db.models import Prefetch
     items = list(models.MusicItem.objects.prefetch_related(
         Prefetch(
             "musicitempart_set",
-            queryset=models.MusicItemPart.objects.select_related("instrument").order_by("instrument__name"),
+            queryset=models.MusicItemPart.objects.prefetch_related("instruments"),
         )
     ).order_by("name"))
     my_instrument_ids = set(request.user.instruments.values_list("pk", flat=True))
     # Annotate each item with my_parts / other_parts so the template stays simple
     for item in items:
         all_parts = list(item.musicitempart_set.all())
-        item.my_parts = [p for p in all_parts if p.instrument_id in my_instrument_ids]
-        item.other_parts = [p for p in all_parts if p.instrument_id not in my_instrument_ids]
+        item.my_parts = [
+            p for p in all_parts
+            if my_instrument_ids & {i.id for i in p.instruments.all()}
+        ]
+        item.other_parts = [p for p in all_parts if p not in item.my_parts]
     return render(request, "music.html", {"items": items})
 
 
@@ -766,6 +775,26 @@ def _validate_part_upload(uploaded_file):
     return ext
 
 
+def _parse_part_assignment(post):
+    """Read the 'is Score / which instruments' checklist from a part form POST."""
+    is_score = post.get("is_score") in ("1", "true", "on")
+    instrument_ids = [i for i in post.getlist("instrument_ids") if i]
+    return is_score, instrument_ids
+
+
+def _part_json(obj):
+    import json
+    return json.dumps({
+        "id": obj.pk,
+        "file_url": obj.file.url if obj.file else "",
+        "file_name": obj.file.name.split("/")[-1] if obj.file else "",
+        "external_link": obj.external_link,
+        "is_score": obj.is_score,
+        "instrument_ids": list(obj.instruments.values_list("id", flat=True)),
+        "label": obj.label,
+    })
+
+
 @admin_required
 def admin_music_item_parts(request, music_item_id, part_id=None):
     music_item = get_object_or_404(models.MusicItem, pk=music_item_id)
@@ -785,43 +814,46 @@ def admin_music_item_parts(request, music_item_id, part_id=None):
             except ValueError as e:
                 return HttpResponseBadRequest(str(e))
 
+        # Clearing a file is a minimal, self-contained action — it doesn't
+        # touch the score/instrument assignment, so it skips that validation.
+        if path_id != 0 and request.POST.get("clear_file") == "1":
+            obj = get_object_or_404(models.MusicItemPart, pk=path_id)
+            if obj.file:
+                obj.file.delete(save=False)
+                obj.file = None
+                obj.save(update_fields=["file"])
+            return HttpResponse("ok")
+
+        is_score, instrument_ids = _parse_part_assignment(request.POST)
+        if not is_score and not instrument_ids:
+            return HttpResponseBadRequest("Select Score and/or at least one instrument.")
+        instruments = models.Instrument.objects.filter(pk__in=instrument_ids)
+
         if path_id == 0:  # add
-            instrument = get_object_or_404(models.Instrument, pk=request.POST.get("instrument_id"))
             obj = models.MusicItemPart(
                 musicItem=music_item,
-                instrument=instrument,
+                is_score=is_score,
                 external_link=forms.normalise_url(request.POST.get("external_link", "")),
             )
             if uploaded_file:
                 obj.file = uploaded_file
             obj.save()
-            import json
-            return HttpResponse(
-                json.dumps({
-                    "id": obj.pk,
-                    "file_url": obj.file.url if obj.file else "",
-                    "file_name": obj.file.name.split("/")[-1] if obj.file else "",
-                    "external_link": obj.external_link,
-                }),
-                content_type="application/json",
-            )
+            obj.instruments.set(instruments)
+            return HttpResponse(_part_json(obj), content_type="application/json")
         else:  # update
             obj = get_object_or_404(models.MusicItemPart, pk=path_id)
             obj.external_link = forms.normalise_url(request.POST.get("external_link", obj.external_link))
-            update_fields = ["external_link"]
+            obj.is_score = is_score
+            update_fields = ["external_link", "is_score"]
             if uploaded_file:
                 # Delete old file from disk before replacing
                 if obj.file:
                     obj.file.delete(save=False)
                 obj.file = uploaded_file
                 update_fields.append("file")
-            elif request.POST.get("clear_file") == "1":
-                if obj.file:
-                    obj.file.delete(save=False)
-                obj.file = None
-                update_fields.append("file")
             obj.save(update_fields=update_fields)
-            return HttpResponse("ok")
+            obj.instruments.set(instruments)
+            return HttpResponse(_part_json(obj), content_type="application/json")
 
     if request.method == "DELETE":
         obj = get_object_or_404(models.MusicItemPart, pk=path_id)
@@ -830,7 +862,12 @@ def admin_music_item_parts(request, music_item_id, part_id=None):
         obj.delete()
         return HttpResponse("ok")
 
-    parts = models.MusicItemPart.objects.filter(musicItem=music_item).select_related("instrument").order_by("instrument__name")
+    parts = list(
+        models.MusicItemPart.objects.filter(musicItem=music_item)
+        .prefetch_related("instruments")
+    )
+    for p in parts:
+        p.instrument_id_list = [i.id for i in p.instruments.all()]
     instruments = models.Instrument.objects.select_related("family").order_by("name")
     return render(request, "admin_music_item_parts.html", {
         "music_item": music_item,

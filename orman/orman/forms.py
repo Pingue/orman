@@ -113,13 +113,10 @@ class RentalContractForm(_DaisyFormMixin, forms.ModelForm):
 class MusicItemForm(_DaisyFormMixin, forms.ModelForm):
     class Meta:
         model = models.MusicItem
-        fields = ["name", "composer", "duration", "notes", "contract", "score_file", "external_link"]
+        fields = ["name", "composer", "duration", "notes", "contract"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
-
-    def clean_external_link(self):
-        return normalise_url(self.cleaned_data.get("external_link", ""))
 
 
 class RehearsalSeriesForm(_DaisyFormMixin, forms.ModelForm):

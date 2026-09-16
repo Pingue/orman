@@ -14,7 +14,8 @@
 <div class="alert alert-info text-sm mb-6 max-w-2xl">
   <i class="fas fa-info-circle"></i>
   <div>
-    One part per instrument — upload a file <em>or</em> add an external link.
+    Upload a file <em>or</em> add an external link, and assign it to the full score and/or one or more
+    instruments — the same file can cover several (e.g. Score + Percussion) so you don't have to upload it twice.
     Allowed file types: {{ allowed_extensions }}.
   </div>
 </div>
@@ -25,7 +26,7 @@
     <div class="card bg-base-200 border border-base-content/30" data-id="{{ part.id }}">
       <div class="card-body p-3 gap-2">
         <div class="flex items-center gap-3 flex-wrap">
-          <span class="font-semibold w-44 truncate" title="{{ part.instrument }}">{{ part.instrument }}</span>
+          <span class="font-semibold w-44 truncate" id="label-{{ part.id }}" title="{{ part.label }}">{{ part.label }}</span>
 
           <div class="flex-1 min-w-0 text-sm">
             {% if part.file %}
@@ -42,7 +43,7 @@
             {% endif %}
           </div>
 
-          <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit({{ part.id }}, this)" title="Edit file/link">
+          <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit({{ part.id }}, this)" title="Edit">
             <i class="fas fa-pen"></i>
           </button>
           <button class="btn btn-xs btn-error" onclick="deletePart({{ part.id }}, this)" title="Remove part">
@@ -52,6 +53,22 @@
 
         <!-- Inline edit panel (hidden by default) -->
         <div class="hidden pt-2 border-t border-base-300 space-y-2" id="edit-{{ part.id }}">
+          <div>
+            <label class="label label-text text-xs">Assign to</label>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 p-2 border border-base-300 rounded-lg max-h-40 overflow-y-auto">
+              <label class="flex items-center gap-1 text-sm font-semibold">
+                <input type="checkbox" class="checkbox checkbox-xs is-score-cb" {% if part.is_score %}checked{% endif %}>
+                Score
+              </label>
+              {% for inst in instruments %}
+                <label class="flex items-center gap-1 text-sm">
+                  <input type="checkbox" class="checkbox checkbox-xs instrument-cb" value="{{ inst.id }}"
+                         {% if inst.id in part.instrument_id_list %}checked{% endif %}>
+                  {{ inst }}
+                </label>
+              {% endfor %}
+            </div>
+          </div>
           <div class="flex gap-2 items-center flex-wrap">
             <label class="text-xs font-medium w-28">Replace file:</label>
             <input type="file" accept="{{ allowed_extensions }}"
@@ -86,13 +103,17 @@
   <div class="card-body p-4 gap-3">
     <h2 class="card-title text-base">Add part</h2>
     <div>
-      <label class="label label-text text-xs">Instrument</label>
-      <select id="new-instrument-id" class="select select-bordered select-sm w-56">
-        <option value="">— select instrument —</option>
+      <label class="label label-text text-xs">Assign to</label>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 p-2 border border-base-300 rounded-lg max-h-40 overflow-y-auto" id="new-assign-list">
+        <label class="flex items-center gap-1 text-sm font-semibold">
+          <input type="checkbox" class="checkbox checkbox-xs is-score-cb"> Score
+        </label>
         {% for inst in instruments %}
-          <option value="{{ inst.id }}">{{ inst }}</option>
+          <label class="flex items-center gap-1 text-sm">
+            <input type="checkbox" class="checkbox checkbox-xs instrument-cb" value="{{ inst.id }}"> {{ inst }}
+          </label>
         {% endfor %}
-      </select>
+      </div>
     </div>
     <div class="flex gap-2 items-end flex-wrap">
       <div class="flex-1 min-w-[12rem]">
@@ -119,6 +140,9 @@
 <script>
   const BASE = "{% url 'admin_music_item_parts' music_item.id %}";
   const CSRF = "{{ csrf_token }}";
+  const ALL_INSTRUMENTS = [
+    {% for inst in instruments %}{id: {{ inst.id }}, name: "{{ inst.name|escapejs }}"},{% endfor %}
+  ];
 
   /** Mirror of forms.normalise_url — prepend https:// when no scheme given. */
   function normaliseUrl(v) {
@@ -131,25 +155,55 @@
     document.getElementById("edit-" + id).classList.toggle("hidden");
   }
 
+  /** Build the "Assign to" checklist markup for a dynamically-added card. */
+  function buildAssignChecklist(checkedIds, isScoreChecked) {
+    checkedIds = checkedIds || [];
+    let html = `<label class="flex items-center gap-1 text-sm font-semibold">
+      <input type="checkbox" class="checkbox checkbox-xs is-score-cb" ${isScoreChecked ? "checked" : ""}> Score
+    </label>`;
+    ALL_INSTRUMENTS.forEach(function (inst) {
+      const checked = checkedIds.includes(inst.id) ? "checked" : "";
+      html += `<label class="flex items-center gap-1 text-sm">
+        <input type="checkbox" class="checkbox checkbox-xs instrument-cb" value="${inst.id}" ${checked}> ${inst.name}
+      </label>`;
+    });
+    return html;
+  }
+
+  function readAssignment(container) {
+    const isScore = container.querySelector(".is-score-cb").checked;
+    const instrumentIds = Array.from(container.querySelectorAll(".instrument-cb:checked")).map(cb => cb.value);
+    return {isScore: isScore, instrumentIds: instrumentIds};
+  }
+
   function savePartFile(id, btn) {
+    const container = document.getElementById("edit-" + id);
     const fileInput = document.getElementById("file-input-" + id);
     const linkInput = document.getElementById("link-input-" + id);
-    const normLink  = normaliseUrl(linkInput.value);
+    const assignment = readAssignment(container);
+    if (!assignment.isScore && !assignment.instrumentIds.length) {
+      alert("Select Score and/or at least one instrument.");
+      return;
+    }
+    const normLink = normaliseUrl(linkInput.value);
     linkInput.value = normLink;          // show normalised value back to the user
     const fd = new FormData();
     fd.append("external_link", normLink);
+    fd.append("is_score", assignment.isScore ? "1" : "0");
+    assignment.instrumentIds.forEach(iid => fd.append("instrument_ids", iid));
     if (fileInput.files.length) fd.append("file", fileInput.files[0]);
     btn.disabled = true; btn.textContent = "Saving…";
     fetch(BASE + id, {method: "POST", headers: {"X-CSRFToken": CSRF}, body: fd})
-      .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(t); }); })
-      .then(() => {
+      .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(t); }); return r.json(); })
+      .then(data => {
         const fnameEl = document.getElementById("fname-" + id);
         if (fileInput.files.length) {
           fnameEl.outerHTML = `<span class="opacity-70 truncate block" id="fname-${id}"><i class="fas fa-file mr-1"></i>${fileInput.files[0].name}</span>`;
         } else if (normLink) {
           fnameEl.outerHTML = `<a href="${normLink}" target="_blank" rel="noopener noreferrer" class="link link-primary truncate block" id="fname-${id}"><i class="fas fa-external-link-alt mr-1"></i>${normLink}</a>`;
         }
-        document.getElementById("edit-" + id).classList.add("hidden");
+        document.getElementById("label-" + id).textContent = data.label;
+        container.classList.add("hidden");
       })
       .catch(e => alert("Failed to save: " + e.message))
       .finally(() => { btn.disabled = false; btn.textContent = "Save"; });
@@ -182,24 +236,27 @@
   }
 
   function addPart() {
-    const instrumentId = document.getElementById("new-instrument-id").value;
+    const assignContainer = document.getElementById("new-assign-list");
     const fileInput    = document.getElementById("new-file");
     const linkInput    = document.getElementById("new-link");
     const errEl        = document.getElementById("add-error");
-    if (!instrumentId) { showError("Please select an instrument."); return; }
+    const assignment    = readAssignment(assignContainer);
+    if (!assignment.isScore && !assignment.instrumentIds.length) {
+      showError("Select Score and/or at least one instrument."); return;
+    }
     if (!fileInput.files.length && !linkInput.value.trim()) {
       showError("Please upload a file or provide a link."); return;
     }
     errEl.classList.add("hidden");
     const fd = new FormData();
-    fd.append("instrument_id", instrumentId);
+    fd.append("is_score", assignment.isScore ? "1" : "0");
+    assignment.instrumentIds.forEach(iid => fd.append("instrument_ids", iid));
     fd.append("external_link", normaliseUrl(linkInput.value));  // normalise before sending
     if (fileInput.files.length) fd.append("file", fileInput.files[0]);
     fetch(BASE + "0", {method: "POST", headers: {"X-CSRFToken": CSRF}, body: fd})
       .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(t); }); return r.json(); })
       .then(data => {
         document.getElementById("empty-msg")?.remove();
-        const label    = document.getElementById("new-instrument-id").selectedOptions[0].text;
         const normLink = data.external_link;   // server-normalised value
         let fileDisplay;
         if (data.file_name) {
@@ -214,12 +271,18 @@
         card.innerHTML = `
           <div class="card-body p-3 gap-2">
             <div class="flex items-center gap-3 flex-wrap">
-              <span class="font-semibold w-44 truncate">${label}</span>
+              <span class="font-semibold w-44 truncate" id="label-${data.id}">${data.label}</span>
               <div class="flex-1 min-w-0 text-sm">${fileDisplay}</div>
-              <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit(${data.id})" title="Edit file/link"><i class="fas fa-pen"></i></button>
+              <button class="btn btn-xs btn-ghost opacity-60" onclick="toggleEdit(${data.id})" title="Edit"><i class="fas fa-pen"></i></button>
               <button class="btn btn-xs btn-error" onclick="deletePart(${data.id}, this)" title="Remove part"><i class="fas fa-trash"></i></button>
             </div>
             <div class="hidden pt-2 border-t border-base-300 space-y-2" id="edit-${data.id}">
+              <div>
+                <label class="label label-text text-xs">Assign to</label>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 p-2 border border-base-300 rounded-lg max-h-40 overflow-y-auto">
+                  ${buildAssignChecklist(data.instrument_ids, data.is_score)}
+                </div>
+              </div>
               <div class="flex gap-2 items-center flex-wrap">
                 <label class="text-xs font-medium w-28">Replace file:</label>
                 <input type="file" accept="{{ allowed_extensions }}" class="file-input file-input-bordered file-input-sm flex-1" id="file-input-${data.id}">
@@ -234,7 +297,7 @@
             </div>
           </div>`;
         document.getElementById("parts-list").appendChild(card);
-        document.getElementById("new-instrument-id").value = "";
+        assignContainer.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
         fileInput.value = ""; linkInput.value = "";
       })
       .catch(e => showError(e.message || "Failed to add part."));

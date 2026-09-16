@@ -28,7 +28,7 @@
           <div class="space-y-0.5 mt-1">
             {% for part in item.my_parts %}
               <div class="flex items-center gap-2 text-sm py-0.5">
-                <span class="font-medium w-36 truncate" title="{{ part.instrument }}">{{ part.instrument }}</span>
+                <span class="font-medium w-36 truncate" title="{{ part.label }}">{{ part.label }}</span>
                 {% if part.file %}
                   <a href="{{ part.file.url }}" target="_blank" rel="noopener noreferrer"
                      class="link link-primary">
@@ -48,32 +48,16 @@
         {% endif %}
 
         <!-- Expandable section: other parts + full score -->
-        {% if item.other_parts or item.score_file or item.external_link %}
+        {% if item.other_parts %}
           <details class="mt-1">
             <summary class="text-xs cursor-pointer opacity-50 hover:opacity-80 select-none list-none flex items-center gap-1">
               <i class="fas fa-chevron-right text-xs transition-transform details-chevron"></i>
               See all other parts &amp; full score
             </summary>
             <div class="mt-2 space-y-0.5 pl-1">
-              {% if item.score_file or item.external_link %}
-                <div class="flex items-center gap-2 text-sm py-0.5">
-                  <span class="font-medium w-36 truncate opacity-70">Full score</span>
-                  {% if item.score_file %}
-                    <a href="{{ item.score_file.url }}" target="_blank" rel="noopener noreferrer"
-                       class="link link-secondary">
-                      <i class="fas fa-download mr-1"></i>Download
-                    </a>
-                  {% elif item.external_link %}
-                    <a href="{{ item.external_link }}" target="_blank" rel="noopener noreferrer"
-                       class="link link-secondary">
-                      <i class="fas fa-external-link-alt mr-1"></i>Open
-                    </a>
-                  {% endif %}
-                </div>
-              {% endif %}
               {% for part in item.other_parts %}
                 <div class="flex items-center gap-2 text-sm py-0.5">
-                  <span class="w-36 truncate opacity-70" title="{{ part.instrument }}">{{ part.instrument }}</span>
+                  <span class="w-36 truncate opacity-70" title="{{ part.label }}">{{ part.label }}</span>
                   {% if part.file %}
                     <a href="{{ part.file.url }}" target="_blank" rel="noopener noreferrer"
                        class="link link-secondary">
