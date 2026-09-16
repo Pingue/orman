@@ -94,13 +94,17 @@
   </div>
 </div>
 
-{% if request.user.is_admin %}
 <div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
   <div class="card-body">
     <h2 class="card-title text-lg">MCP API access</h2>
     <p class="text-sm opacity-70">
-      Lets an MCP client (e.g. Claude) manage Orman on your behalf — performances, rehearsals,
-      the music library, people, and more — with the same access you have as an admin.
+      {% if request.user.is_admin %}
+        Lets an MCP client (e.g. Claude) manage Orman on your behalf — performances, rehearsals,
+        the music library, people, and more — with the same access you have as an admin.
+      {% else %}
+        Lets an MCP client (e.g. Claude) act as you — view upcoming events and the music
+        library, manage your own RSVPs, profile, poll answers, and announcements.
+      {% endif %}
       Keep this token secret; anyone with it can act as you.
     </p>
     <div class="flex items-center gap-2 mt-1">
@@ -124,7 +128,7 @@
       </button>
     </div>
     <div class="card-actions justify-end pt-2">
-      <form method="post" action="{% url 'admin_regenerate_mcp_token' %}"
+      <form method="post" action="{% url 'regenerate_mcp_token' %}"
             onsubmit="return confirm('Regenerate your MCP token? The old one will stop working immediately.');">
         {% csrf_token %}
         <button type="submit" class="btn btn-sm btn-ghost text-error">Regenerate token</button>
@@ -132,7 +136,6 @@
     </div>
   </div>
 </div>
-{% endif %}
 
 <script>
 function b64urlToBuffer(str) {

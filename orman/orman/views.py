@@ -303,8 +303,9 @@ def mcp_endpoint(request):
             {"error": "Invalid or revoked token."},
             status=401, headers={"WWW-Authenticate": 'Bearer realm="orman-mcp"'},
         )
-    if not person.is_admin:
-        return JsonResponse({"error": "This account no longer has admin access."}, status=403)
+    # Any active Person can authenticate — admin-only tools are gated per-tool
+    # inside mcp_server.py (both hidden from tools/list and rejected on
+    # tools/call), not here. Everyone else gets the member-scoped tools.
 
     accept = request.headers.get("Accept", "")
     if accept and "application/json" not in accept and "*/*" not in accept:
@@ -480,10 +481,13 @@ def profile(request):
     return render(request, "profile.html", {"person": request.user, "form": form})
 
 
-@admin_required
+@login_required
 @require_POST
-def admin_regenerate_mcp_token(request):
-    """Rotate the current user's MCP API token, invalidating the old one."""
+def regenerate_mcp_token(request):
+    """Rotate the current user's MCP API token, invalidating the old one.
+
+    Available to every account, not just admins — non-admin tokens still
+    grant the member-scoped MCP tools (see mcp_server.py)."""
     import uuid as _uuid
     request.user.mcp_token = _uuid.uuid4()
     request.user.save(update_fields=["mcp_token"])

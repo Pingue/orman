@@ -7,7 +7,7 @@ views.mcp_endpoint).
 Auth: `Authorization: Bearer <token>` where token is a Person.mcp_token.
 Every tool call re-checks person.is_admin at call time — nothing about
 admin access is baked into the token itself, so revoking admin (or
-regenerating the token, see views.admin_regenerate_mcp_token) cuts off
+regenerating the token, see views.regenerate_mcp_token) cuts off
 access immediately.
 
 Transport: MCP "Streamable HTTP" in stateless JSON mode (protocol version
@@ -295,15 +295,28 @@ def tool_upcoming_events(args, person):
         models.Performance.objects.filter(date__gte=today, date__lte=cutoff)
         .select_related("venue").order_by("date", "time")
     )
-    return {
-        "rehearsals": [
-            _serialize(r, ["name", "startDate", "startTime", "endTime", "venue"]) for r in rehearsals
-        ],
-        "performances": [
-            _serialize(p, ["name", "date", "time", "venue", "published", "publicDescription"])
-            for p in performances
-        ],
-    }
+    my_rehearsal_rsvps = dict(
+        models.RSVP.objects.filter(person=person, rehearsal__in=rehearsals)
+        .values_list("rehearsal_id", "status")
+    )
+    my_performance_rsvps = dict(
+        models.RSVP.objects.filter(person=person, performance__in=performances)
+        .values_list("performance_id", "status")
+    )
+
+    rehearsal_rows = []
+    for r in rehearsals:
+        row = _serialize(r, ["name", "startDate", "startTime", "endTime", "venue"])
+        row["my_rsvp"] = my_rehearsal_rsvps.get(r.pk)
+        rehearsal_rows.append(row)
+
+    performance_rows = []
+    for p in performances:
+        row = _serialize(p, ["name", "date", "time", "venue", "published", "publicDescription"])
+        row["my_rsvp"] = my_performance_rsvps.get(p.pk)
+        performance_rows.append(row)
+
+    return {"rehearsals": rehearsal_rows, "performances": performance_rows}
 
 
 def tool_music_parts_list(args, person):
@@ -503,14 +516,200 @@ def tool_set_person_password(args, person):
     return {"saved": True, "person_id": target.pk}
 
 
+# ── Member-scoped tools ──────────────────────────────────────────────────────
+# These always act on the calling `person` — none of them accept a person_id —
+# so they're safe to expose to every authenticated account, mirroring exactly
+# what that member could already do on the member-facing pages.
+
+def tool_whoami(args, person):
+    return _serialize(person, forms.ProfileForm.base_fields.keys()) | {"member": person.member, "is_admin": person.is_admin}
+
+
+def tool_update_my_profile(args, person):
+    fields = {k: v for k, v in args.items() if k in forms.ProfileForm.base_fields}
+    if "instrument_ids" in args:
+        fields["instruments"] = args["instrument_ids"]
+    if not fields:
+        raise ToolError("Provide at least one of: firstNames, lastName, email, phone, instrument_ids.")
+    data = _form_initial_data(person, Resource("person", models.Person, forms.ProfileForm, []))
+    data.update(fields)
+    form = forms.ProfileForm(data=data, instance=person)
+    if not form.is_valid():
+        raise ToolError(f"Validation failed: {form.errors.as_text()}")
+    obj = form.save()
+    return {"saved": True, **_serialize(obj, forms.ProfileForm.base_fields.keys())}
+
+
+def tool_my_rsvps(args, person):
+    qs = (
+        models.RSVP.objects.filter(person=person)
+        .select_related("rehearsal", "performance").prefetch_related("playing_instruments")
+    )
+    return {
+        "rsvps": [
+            {
+                "id": r.pk,
+                "event_type": "rehearsal" if r.rehearsal_id else "performance",
+                "event_id": r.rehearsal_id or r.performance_id,
+                "event": str(r.rehearsal or r.performance),
+                "status": r.status, "note": r.note,
+                "playing_instruments": [i.name for i in r.playing_instruments.all()],
+            }
+            for r in qs
+        ],
+    }
+
+
+def tool_my_rsvp_set(args, person):
+    event_type = args.get("event_type")
+    if event_type not in _RSVP_EVENT_FIELDS:
+        raise ToolError("event_type must be 'rehearsal' or 'performance'.")
+    status = args.get("status")
+    if status not in dict(models.RSVP.STATUS_CHOICES):
+        valid = ", ".join(dict(models.RSVP.STATUS_CHOICES))
+        raise ToolError(f"status must be one of: {valid}.")
+    event_model = models.Rehearsal if event_type == "rehearsal" else models.Performance
+    try:
+        event = event_model.objects.get(pk=args.get("event_id"))
+    except event_model.DoesNotExist:
+        raise ToolError(f"No {event_type} with id {args.get('event_id')}.")
+
+    rsvp_obj, _ = models.RSVP.objects.update_or_create(
+        person=person, **{event_type: event},
+        defaults={"status": status, "note": args.get("note", "")},
+    )
+    instrument_ids = args.get("playing_instrument_ids") or []
+    valid_ids = list(person.instruments.filter(pk__in=instrument_ids).values_list("pk", flat=True))
+    rsvp_obj.playing_instruments.set(valid_ids)
+    return {"saved": True, "id": rsvp_obj.pk, "status": rsvp_obj.status}
+
+
+def tool_music_library(args, person):
+    my_instrument_ids = set(person.instruments.values_list("pk", flat=True))
+    items = models.MusicItem.objects.prefetch_related("musicitempart_set__instruments").order_by("name")
+    results = []
+    for item in items:
+        all_parts = list(item.musicitempart_set.all())
+        my_parts, other_parts = [], []
+        for p in all_parts:
+            bucket = my_parts if (my_instrument_ids & {i.id for i in p.instruments.all()}) else other_parts
+            bucket.append({
+                "id": p.pk, "label": p.label, "is_score": p.is_score,
+                "external_link": p.external_link, "has_file": bool(p.file),
+                "file_url": p.file.url if p.file else None,
+            })
+        results.append({
+            **_serialize(item, ["name", "composer", "duration", "notes"]),
+            "my_parts": my_parts, "other_parts": other_parts,
+        })
+    return {"music_items": results}
+
+
+def tool_polls(args, person):
+    active_polls = list(
+        models.Poll.objects.filter(active=True).prefetch_related("questions__choices")
+    )
+    all_questions = [q for poll in active_polls for q in poll.questions.all()]
+    answers = (
+        models.PollAnswer.objects.filter(person=person, question__in=all_questions)
+        .select_related("choice")
+    )
+    answers_by_question = {}
+    for a in answers:
+        answers_by_question.setdefault(a.question_id, []).append(
+            a.choice.text if a.choice else a.text_value
+        )
+    return {
+        "polls": [
+            {
+                "id": poll.pk, "title": poll.title, "description": poll.description,
+                "questions": [
+                    {
+                        "id": q.pk, "text": q.text, "kind": q.kind,
+                        "choices": [{"id": c.pk, "text": c.text} for c in q.choices.all()],
+                        "my_answers": answers_by_question.get(q.id, []),
+                    }
+                    for q in poll.questions.all()
+                ],
+            }
+            for poll in active_polls
+        ],
+    }
+
+
+def tool_answer_poll(args, person):
+    try:
+        question = models.PollQuestion.objects.get(pk=args.get("question_id"), poll__active=True)
+    except models.PollQuestion.DoesNotExist:
+        raise ToolError(f"No active poll question with id {args.get('question_id')}.")
+
+    if question.kind == models.PollQuestion.TYPE_FREE_TEXT:
+        text = (args.get("text") or "").strip()
+        if not text:
+            raise ToolError("This question needs a 'text' answer.")
+        models.PollAnswer.objects.update_or_create(
+            question=question, person=person, choice=None, defaults={"text_value": text},
+        )
+    elif question.kind == models.PollQuestion.TYPE_SINGLE:
+        try:
+            choice = models.PollChoice.objects.get(pk=args.get("choice_id"), question=question)
+        except models.PollChoice.DoesNotExist:
+            raise ToolError("Provide a valid 'choice_id' for this question.")
+        models.PollAnswer.objects.filter(question=question, person=person).delete()
+        models.PollAnswer.objects.create(question=question, person=person, choice=choice)
+    elif question.kind == models.PollQuestion.TYPE_MULTI:
+        choice_ids = args.get("choice_ids") or []
+        valid_ids = set(question.choices.filter(pk__in=choice_ids).values_list("pk", flat=True))
+        if not valid_ids:
+            raise ToolError("Provide at least one valid id in 'choice_ids' for this question.")
+        models.PollAnswer.objects.filter(question=question, person=person).delete()
+        models.PollAnswer.objects.bulk_create([
+            models.PollAnswer(question=question, person=person, choice_id=cid) for cid in valid_ids
+        ])
+    else:  # pragma: no cover — defensive, kind is a closed choice set
+        raise ToolError(f"Unknown question kind '{question.kind}'.")
+    return {"saved": True, "question_id": question.pk}
+
+
+def tool_announcements(args, person):
+    """Mirrors context_processors.announcements() — active, in-window, and
+    not already dismissed by this person (same as the banners shown site-wide)."""
+    from django.utils import timezone
+    now = timezone.now()
+    dismissed_ids = set(
+        models.AnnouncementDismissal.objects.filter(person=person).values_list("announcement_id", flat=True)
+    )
+    visible = [
+        a for a in models.Announcement.objects.filter(active=True)
+        if a.is_visible_now(now) and a.pk not in dismissed_ids
+    ]
+    return {
+        "announcements": [
+            {"id": a.pk, "title": a.title, "body": a.body, "severity": a.severity, "dismissible": a.dismissible}
+            for a in visible
+        ],
+    }
+
+
+def tool_dismiss_announcement(args, person):
+    try:
+        announcement = models.Announcement.objects.get(pk=args.get("announcement_id"))
+    except models.Announcement.DoesNotExist:
+        raise ToolError(f"No announcement with id {args.get('announcement_id')}.")
+    models.AnnouncementDismissal.objects.get_or_create(announcement=announcement, person=person)
+    return {"saved": True, "announcement_id": announcement.pk}
+
+
 # ── Tool registry ────────────────────────────────────────────────────────────
 
 class ToolSpec:
-    def __init__(self, name, description, input_schema, handler, read_only=False, destructive=False, idempotent=False):
+    def __init__(self, name, description, input_schema, handler, *,
+                 admin_only=True, read_only=False, destructive=False, idempotent=False):
         self.name = name
         self.description = description
         self.input_schema = input_schema
         self.handler = handler
+        self.admin_only = admin_only
         self.read_only = read_only
         self.destructive = destructive
         self.idempotent = idempotent
@@ -548,7 +747,7 @@ TOOLS = [
         "List every resource type this server manages (venues, performances, people, etc.), "
         "and which fields each one has. Call this first to discover the schema.",
         {"type": "object", "properties": {}},
-        tool_list_resources, read_only=True, idempotent=True,
+        tool_list_resources, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_list",
@@ -564,7 +763,7 @@ TOOLS = [
             },
             "required": ["resource"],
         },
-        tool_list, read_only=True, idempotent=True,
+        tool_list, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_get",
@@ -574,7 +773,7 @@ TOOLS = [
             "properties": {"resource": {"type": "string", "enum": _RESOURCE_ENUM}, "id": _INT},
             "required": ["resource", "id"],
         },
-        tool_get, read_only=True, idempotent=True,
+        tool_get, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_create",
@@ -585,7 +784,7 @@ TOOLS = [
             "properties": {"resource": {"type": "string", "enum": _RESOURCE_ENUM}, "fields": _FIELDS_OBJ},
             "required": ["resource", "fields"],
         },
-        tool_create, idempotent=False,
+        tool_create, admin_only=True, idempotent=False,
     ),
     ToolSpec(
         "orman_update",
@@ -599,7 +798,7 @@ TOOLS = [
             },
             "required": ["resource", "id", "fields"],
         },
-        tool_update, idempotent=True,
+        tool_update, admin_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_delete",
@@ -610,13 +809,14 @@ TOOLS = [
             "properties": {"resource": {"type": "string", "enum": _RESOURCE_ENUM}, "id": _INT},
             "required": ["resource", "id"],
         },
-        tool_delete, destructive=True, idempotent=True,
+        tool_delete, admin_only=True, destructive=True, idempotent=True,
     ),
     ToolSpec(
         "orman_upcoming_events",
-        "List upcoming rehearsals and performances within the next N days (default 90).",
+        "List upcoming rehearsals and performances within the next N days (default 90), "
+        "with the caller's own RSVP status attached to each.",
         {"type": "object", "properties": {"days": {**_INT, "default": 90, "maximum": 365}}},
-        tool_upcoming_events, read_only=True, idempotent=True,
+        tool_upcoming_events, admin_only=False, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_music_parts_list",
@@ -626,7 +826,7 @@ TOOLS = [
             "properties": {"music_item_id": _INT},
             "required": ["music_item_id"],
         },
-        tool_music_parts_list, read_only=True, idempotent=True,
+        tool_music_parts_list, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_music_parts_set",
@@ -646,7 +846,7 @@ TOOLS = [
             },
             "required": ["music_item_id"],
         },
-        tool_music_parts_set, idempotent=True,
+        tool_music_parts_set, admin_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_music_parts_delete",
@@ -656,7 +856,7 @@ TOOLS = [
             "properties": {"music_item_id": _INT, "part_id": _INT},
             "required": ["music_item_id", "part_id"],
         },
-        tool_music_parts_delete, destructive=True, idempotent=True,
+        tool_music_parts_delete, admin_only=True, destructive=True, idempotent=True,
     ),
     ToolSpec(
         "orman_repertoire_list",
@@ -666,7 +866,7 @@ TOOLS = [
             "properties": {"event_type": _EVENT_TYPE, "event_id": _INT},
             "required": ["event_type", "event_id"],
         },
-        tool_repertoire_list, read_only=True, idempotent=True,
+        tool_repertoire_list, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_repertoire_set",
@@ -683,7 +883,7 @@ TOOLS = [
             },
             "required": ["event_type", "event_id", "music_item_id"],
         },
-        tool_repertoire_set, idempotent=True,
+        tool_repertoire_set, admin_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_repertoire_delete",
@@ -693,7 +893,7 @@ TOOLS = [
             "properties": {"event_type": _EVENT_TYPE, "event_id": _INT, "item_id": _INT},
             "required": ["event_type", "event_id", "item_id"],
         },
-        tool_repertoire_delete, destructive=True, idempotent=True,
+        tool_repertoire_delete, admin_only=True, destructive=True, idempotent=True,
     ),
     ToolSpec(
         "orman_rsvp_list",
@@ -703,12 +903,13 @@ TOOLS = [
             "properties": {"event_type": _EVENT_TYPE, "event_id": _INT},
             "required": ["event_type", "event_id"],
         },
-        tool_rsvp_list, read_only=True, idempotent=True,
+        tool_rsvp_list, admin_only=True, read_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_rsvp_set",
-        "Set (or change) a specific person's RSVP for a rehearsal or performance. "
-        "playing_instrument_ids is filtered to instruments that person actually plays.",
+        "Set (or change) a specific person's RSVP for a rehearsal or performance — for "
+        "yourself, use orman_my_rsvp_set instead. playing_instrument_ids is filtered to "
+        "instruments that person actually plays.",
         {
             "type": "object",
             "properties": {
@@ -719,7 +920,7 @@ TOOLS = [
             },
             "required": ["event_type", "event_id", "person_id", "status"],
         },
-        tool_rsvp_set, idempotent=True,
+        tool_rsvp_set, admin_only=True, idempotent=True,
     ),
     ToolSpec(
         "orman_set_person_password",
@@ -730,7 +931,90 @@ TOOLS = [
             "properties": {"person_id": _INT, "password": _STRING},
             "required": ["person_id", "password"],
         },
-        tool_set_person_password, destructive=True, idempotent=True,
+        tool_set_person_password, admin_only=True, destructive=True, idempotent=True,
+    ),
+
+    # ── Member-scoped tools — always act as the calling person, never take a
+    # person_id, and are available to every authenticated account. ─────────
+    ToolSpec(
+        "orman_whoami",
+        "Get your own profile: name, email, phone, instruments, and whether you're an admin.",
+        {"type": "object", "properties": {}},
+        tool_whoami, admin_only=False, read_only=True, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_update_my_profile",
+        "Update your own profile (name, email, phone, instruments you play).",
+        {
+            "type": "object",
+            "properties": {
+                "firstNames": _STRING, "lastName": _STRING, "email": _STRING,
+                "phone": _STRING, "instrument_ids": _INT_ARRAY,
+            },
+        },
+        tool_update_my_profile, admin_only=False, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_my_rsvps",
+        "List your own RSVPs (past and upcoming) for rehearsals and performances.",
+        {"type": "object", "properties": {}},
+        tool_my_rsvps, admin_only=False, read_only=True, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_my_rsvp_set",
+        "Set (or change) your own RSVP for a rehearsal or performance. "
+        "playing_instrument_ids is filtered to instruments you actually play.",
+        {
+            "type": "object",
+            "properties": {
+                "event_type": _EVENT_TYPE, "event_id": _INT,
+                "status": {"type": "string", "enum": [c[0] for c in models.RSVP.STATUS_CHOICES]},
+                "note": _STRING,
+                "playing_instrument_ids": _INT_ARRAY,
+            },
+            "required": ["event_type", "event_id", "status"],
+        },
+        tool_my_rsvp_set, admin_only=False, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_music_library",
+        "List the music library. Each item's parts are split into ones matching your own "
+        "instruments (my_parts) and everything else, including the full score (other_parts).",
+        {"type": "object", "properties": {}},
+        tool_music_library, admin_only=False, read_only=True, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_polls",
+        "List active polls, their questions/choices, and any answers you've already given.",
+        {"type": "object", "properties": {}},
+        tool_polls, admin_only=False, read_only=True, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_answer_poll",
+        "Answer one poll question as yourself. For a free_text question pass 'text'; for "
+        "single_choice pass 'choice_id'; for multi_choice pass 'choice_ids' (replaces your "
+        "previous answer to that question).",
+        {
+            "type": "object",
+            "properties": {
+                "question_id": _INT, "text": _STRING, "choice_id": _INT, "choice_ids": _INT_ARRAY,
+            },
+            "required": ["question_id"],
+        },
+        tool_answer_poll, admin_only=False, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_announcements",
+        "List active site announcements currently visible to you (already-dismissed ones "
+        "are left out, same as the site's banner).",
+        {"type": "object", "properties": {}},
+        tool_announcements, admin_only=False, read_only=True, idempotent=True,
+    ),
+    ToolSpec(
+        "orman_dismiss_announcement",
+        "Dismiss an announcement banner for yourself.",
+        {"type": "object", "properties": {"announcement_id": _INT}, "required": ["announcement_id"]},
+        tool_dismiss_announcement, admin_only=False, idempotent=True,
     ),
 ]
 
@@ -775,24 +1059,41 @@ def _dispatch_method(method: str, params: dict, person):
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": (
-                "Admin API for the Orman orchestra management system. Start with "
-                "orman_list_resources to see what's available, then orman_list/orman_get "
-                "to explore data before creating or changing anything."
+                (
+                    "Full admin API for the Orman orchestra management system. Start with "
+                    "orman_list_resources to see what's available, then orman_list/orman_get "
+                    "to explore data before creating or changing anything."
+                ) if person.is_admin else (
+                    "Member API for the Orman orchestra management system — lets you view "
+                    "upcoming events, the music library, and polls, and manage your own "
+                    "profile, RSVPs, poll answers, and announcements. Call tools/list to "
+                    "see what's available."
+                )
             ),
         }
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": [t.to_mcp() for t in TOOLS]}
+        return {"tools": [t.to_mcp() for t in _tools_for(person)]}
     if method == "tools/call":
         return _call_tool(params, person)
     raise JsonRpcError(METHOD_NOT_FOUND, f"Unknown method '{method}'.")
 
 
+def _tools_for(person):
+    """Admins see every tool; everyone else only sees the member-scoped ones
+    (which always act as the caller, never accept a person_id)."""
+    if person.is_admin:
+        return TOOLS
+    return [t for t in TOOLS if not t.admin_only]
+
+
 def _call_tool(params: dict, person):
     name = params.get("name")
     tool = TOOLS_BY_NAME.get(name)
-    if tool is None:
+    if tool is None or (tool.admin_only and not person.is_admin):
+        # Same error either way — a non-admin shouldn't be able to tell an
+        # admin-only tool apart from one that plain doesn't exist.
         raise JsonRpcError(METHOD_NOT_FOUND, f"Unknown tool '{name}'.")
     arguments = params.get("arguments") or {}
     try:

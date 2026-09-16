@@ -2756,6 +2756,9 @@ class MCPServerTests(TestCase):
     def _call(self, tool_name, arguments=None, id=1, token=None):
         return self._rpc("tools/call", {"name": tool_name, "arguments": arguments or {}}, id=id, token=token)
 
+    def _call_as_member(self, tool_name, arguments=None, id=1):
+        return self._call(tool_name, arguments, id=id, token=str(self.member.mcp_token))
+
     # ── Auth ─────────────────────────────────────────────────────────────
 
     def test_missing_auth_header_returns_401(self):
@@ -2770,9 +2773,10 @@ class MCPServerTests(TestCase):
         resp = self._rpc("ping", token="not-a-real-token")
         self.assertEqual(resp.status_code, 401)
 
-    def test_non_admin_token_returns_403(self):
+    def test_non_admin_token_authenticates_fine(self):
+        """Non-admins can use the server too — just a smaller, member-scoped tool set."""
         resp = self._rpc("ping", token=str(self.member.mcp_token))
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
 
     def test_get_request_not_allowed(self):
         resp = self.client.get(reverse("mcp_endpoint"))
@@ -2824,6 +2828,21 @@ class MCPServerTests(TestCase):
         resp = self._call("orman_not_a_real_tool")
         self.assertEqual(resp.status_code, 400)
         self.assertIn("error", resp.json())
+
+    def test_member_tools_list_excludes_admin_only_tools(self):
+        resp = self._rpc("tools/list", token=str(self.member.mcp_token))
+        names = {t["name"] for t in resp.json()["result"]["tools"]}
+        self.assertIn("orman_whoami", names)
+        self.assertIn("orman_my_rsvp_set", names)
+        for admin_only in ["orman_list", "orman_create", "orman_delete",
+                            "orman_rsvp_set", "orman_set_person_password"]:
+            self.assertNotIn(admin_only, names)
+
+    def test_member_calling_admin_only_tool_is_unknown_tool_error(self):
+        resp = self._call_as_member("orman_delete", {"resource": "venue", "id": self.venue.id})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("error", resp.json())
+        self.assertTrue(models.Venue.objects.filter(pk=self.venue.id).exists())
 
     # ── Generic CRUD ─────────────────────────────────────────────────────
 
@@ -3003,6 +3022,128 @@ class MCPServerTests(TestCase):
         })
         self.assertTrue(resp.json()["result"]["isError"])
 
+    # ── Member-scoped tools ──────────────────────────────────────────────
+
+    def test_whoami(self):
+        result = self._call_as_member("orman_whoami").json()["result"]["structuredContent"]
+        self.assertEqual(result["email"], "member@example.com")
+        self.assertFalse(result["is_admin"])
+
+    def test_update_my_profile(self):
+        result = self._call_as_member("orman_update_my_profile", {
+            "phone": "01234 000000",
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(result["phone"], "01234 000000")
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.phone, "01234 000000")
+
+    def test_update_my_profile_cannot_be_used_by_admin_to_impersonate(self):
+        """orman_update_my_profile always acts on the caller — admins editing
+        someone else's profile must use orman_update with an explicit id."""
+        result = self._call("orman_update_my_profile", {"phone": "999"}).json()["result"]["structuredContent"]
+        self.assertEqual(result["email"], self.admin.email)
+        self.member.refresh_from_db()
+        self.assertNotEqual(self.member.phone, "999")
+
+    def test_my_rsvp_set_and_list_only_affects_self(self):
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        saved = self._call_as_member("orman_my_rsvp_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "status": "yes",
+        }).json()["result"]["structuredContent"]
+        self.assertEqual(saved["status"], "yes")
+
+        mine = self._call_as_member("orman_my_rsvps").json()["result"]["structuredContent"]
+        self.assertEqual(len(mine["rsvps"]), 1)
+        self.assertEqual(mine["rsvps"][0]["event"], "Tues")
+
+        # The admin's own RSVP list is unaffected.
+        admin_mine = self._call("orman_my_rsvps").json()["result"]["structuredContent"]
+        self.assertEqual(admin_mine["rsvps"], [])
+
+    def test_my_rsvp_set_filters_to_own_instruments(self):
+        fam = models.InstrumentFamily.objects.create(name="Strings")
+        violin = models.Instrument.objects.create(name="Violin", family=fam)
+        viola = models.Instrument.objects.create(name="Viola", family=fam)
+        self.member.instruments.add(violin)
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        self._call_as_member("orman_my_rsvp_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "status": "yes",
+            "playing_instrument_ids": [violin.id, viola.id],
+        })
+        mine = self._call_as_member("orman_my_rsvps").json()["result"]["structuredContent"]
+        self.assertEqual(mine["rsvps"][0]["playing_instruments"], ["Violin"])
+
+    def test_music_library_splits_my_parts_from_others(self):
+        fam = models.InstrumentFamily.objects.create(name="Strings")
+        violin = models.Instrument.objects.create(name="Violin", family=fam)
+        cello = models.Instrument.objects.create(name="Cello", family=fam)
+        self.member.instruments.add(violin)
+        item = models.MusicItem.objects.create(name="Symphony")
+        violin_part = models.MusicItemPart.objects.create(musicItem=item)
+        violin_part.instruments.add(violin)
+        cello_part = models.MusicItemPart.objects.create(musicItem=item)
+        cello_part.instruments.add(cello)
+
+        result = self._call_as_member("orman_music_library").json()["result"]["structuredContent"]
+        item_row = next(i for i in result["music_items"] if i["name"] == "Symphony")
+        self.assertEqual(len(item_row["my_parts"]), 1)
+        self.assertEqual(len(item_row["other_parts"]), 1)
+        self.assertEqual(item_row["my_parts"][0]["label"], "Violin")
+
+    def test_polls_and_answer_poll_free_text(self):
+        poll = models.Poll.objects.create(title="Ideas", active=True)
+        question = models.PollQuestion.objects.create(
+            poll=poll, text="Any ideas?", kind=models.PollQuestion.TYPE_FREE_TEXT, order=1,
+        )
+        listed = self._call_as_member("orman_polls").json()["result"]["structuredContent"]
+        self.assertEqual(listed["polls"][0]["questions"][0]["my_answers"], [])
+
+        saved = self._call_as_member("orman_answer_poll", {
+            "question_id": question.id, "text": "More rehearsals please",
+        }).json()["result"]
+        self.assertFalse(saved["isError"])
+
+        listed_again = self._call_as_member("orman_polls").json()["result"]["structuredContent"]
+        self.assertEqual(listed_again["polls"][0]["questions"][0]["my_answers"], ["More rehearsals please"])
+
+    def test_answer_poll_single_choice_replaces_previous_answer(self):
+        poll = models.Poll.objects.create(title="Colour", active=True)
+        question = models.PollQuestion.objects.create(
+            poll=poll, text="Favourite?", kind=models.PollQuestion.TYPE_SINGLE, order=1,
+        )
+        red = models.PollChoice.objects.create(question=question, text="Red")
+        blue = models.PollChoice.objects.create(question=question, text="Blue")
+        self._call_as_member("orman_answer_poll", {"question_id": question.id, "choice_id": red.id})
+        self._call_as_member("orman_answer_poll", {"question_id": question.id, "choice_id": blue.id})
+        self.assertEqual(
+            models.PollAnswer.objects.filter(question=question, person=self.member).count(), 1,
+        )
+        self.assertEqual(
+            models.PollAnswer.objects.get(question=question, person=self.member).choice, blue,
+        )
+
+    def test_announcements_and_dismiss(self):
+        announcement = models.Announcement.objects.create(body="Hello everyone", active=True)
+        listed = self._call_as_member("orman_announcements").json()["result"]["structuredContent"]
+        self.assertEqual(len(listed["announcements"]), 1)
+
+        dismissed = self._call_as_member(
+            "orman_dismiss_announcement", {"announcement_id": announcement.id},
+        ).json()["result"]
+        self.assertFalse(dismissed["isError"])
+
+        listed_again = self._call_as_member("orman_announcements").json()["result"]["structuredContent"]
+        self.assertEqual(len(listed_again["announcements"]), 0)
+
+    def test_upcoming_events_includes_my_rsvp_status(self):
+        future = date.today() + timedelta(days=3)
+        rehearsal = models.Rehearsal.objects.create(name="Weekly", startDate=future, venue=self.venue)
+        self._call_as_member("orman_my_rsvp_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "status": "maybe",
+        })
+        result = self._call_as_member("orman_upcoming_events").json()["result"]["structuredContent"]
+        self.assertEqual(result["rehearsals"][0]["my_rsvp"], "maybe")
+
 
 class MCPTokenTests(TestCase):
     def test_new_users_get_distinct_tokens(self):
@@ -3011,17 +3152,25 @@ class MCPTokenTests(TestCase):
         self.assertIsNotNone(a.mcp_token)
         self.assertNotEqual(a.mcp_token, b.mcp_token)
 
-    def test_regenerate_requires_admin(self):
-        _make_user(email="member@example.com")
+    def test_regenerate_requires_login(self):
+        resp = self.client.post(reverse("regenerate_mcp_token"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/accounts/login/", resp.url)
+
+    def test_non_admin_can_regenerate_their_own_token(self):
+        member = _make_user(email="member@example.com")
         self.client.login(username="member@example.com", password="secret")
-        resp = self.client.post(reverse("admin_regenerate_mcp_token"))
-        self.assertEqual(resp.status_code, 403)
+        old_token = member.mcp_token
+        resp = self.client.post(reverse("regenerate_mcp_token"))
+        self.assertEqual(resp.status_code, 302)
+        member.refresh_from_db()
+        self.assertNotEqual(member.mcp_token, old_token)
 
     def test_regenerate_rotates_token(self):
         admin = _make_user(email="admin@example.com", is_admin=True)
         self.client.login(username="admin@example.com", password="secret")
         old_token = admin.mcp_token
-        resp = self.client.post(reverse("admin_regenerate_mcp_token"))
+        resp = self.client.post(reverse("regenerate_mcp_token"))
         self.assertEqual(resp.status_code, 302)
         admin.refresh_from_db()
         self.assertNotEqual(admin.mcp_token, old_token)
@@ -3030,7 +3179,7 @@ class MCPTokenTests(TestCase):
         admin = _make_user(email="admin@example.com", is_admin=True)
         old_token = str(admin.mcp_token)
         self.client.login(username="admin@example.com", password="secret")
-        self.client.post(reverse("admin_regenerate_mcp_token"))
+        self.client.post(reverse("regenerate_mcp_token"))
         resp = self.client.post(
             reverse("mcp_endpoint"),
             data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}),
