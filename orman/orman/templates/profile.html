@@ -94,6 +94,49 @@
   </div>
 </div>
 
+<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+  <div class="card-body">
+    <h2 class="card-title text-lg">MCP API access</h2>
+    <p class="text-sm opacity-70">
+      {% if request.user.is_admin %}
+        Lets an MCP client (e.g. Claude) manage Orman on your behalf — performances, rehearsals,
+        the music library, people, and more — with the same access you have as an admin.
+      {% else %}
+        Lets an MCP client (e.g. Claude) act as you — view upcoming events and the music
+        library, manage your own RSVPs, profile, poll answers, and announcements.
+      {% endif %}
+      Keep this token secret; anyone with it can act as you.
+    </p>
+    <div class="flex items-center gap-2 mt-1">
+      <input id="mcp-token" type="text" readonly
+             value="{{ request.scheme }}://{{ request.get_host }}{% url 'mcp_endpoint' %}"
+             class="input input-bordered input-sm flex-1 font-mono text-xs">
+    </div>
+    <div class="flex items-center gap-2 mt-2">
+      <input id="mcp-token-value" type="password" readonly
+             value="{{ request.user.mcp_token }}"
+             class="input input-bordered input-sm flex-1 font-mono text-xs">
+      <button type="button" class="btn btn-sm btn-ghost"
+              onclick="var el=document.getElementById('mcp-token-value'); el.type = el.type === 'password' ? 'text' : 'password';"
+              title="Show/hide">
+        <i class="fas fa-eye"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost"
+              onclick="navigator.clipboard.writeText(document.getElementById('mcp-token-value').value).then(function(){this.textContent='Copied!';}.bind(this))"
+              title="Copy to clipboard">
+        <i class="fas fa-copy"></i>
+      </button>
+    </div>
+    <div class="card-actions justify-end pt-2">
+      <form method="post" action="{% url 'regenerate_mcp_token' %}"
+            onsubmit="return confirm('Regenerate your MCP token? The old one will stop working immediately.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-ghost text-error">Regenerate token</button>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
 function b64urlToBuffer(str) {
   const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
