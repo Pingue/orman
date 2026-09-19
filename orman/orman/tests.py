@@ -2996,6 +2996,24 @@ class MCPServerTests(TestCase):
         }).json()["result"]
         self.assertFalse(deleted["isError"])
 
+    def test_repertoire_set_without_order_appends_to_end(self):
+        rehearsal = models.Rehearsal.objects.create(name="Tues", startDate=date.today(), venue=self.venue)
+        first = models.MusicItem.objects.create(name="Overture")
+        second = models.MusicItem.objects.create(name="Symphony")
+
+        self._call("orman_repertoire_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "music_item_id": first.id,
+        })
+        self._call("orman_repertoire_set", {
+            "event_type": "rehearsal", "event_id": rehearsal.id, "music_item_id": second.id,
+        })
+
+        listed = self._call("orman_repertoire_list", {
+            "event_type": "rehearsal", "event_id": rehearsal.id,
+        }).json()["result"]["structuredContent"]
+        self.assertEqual([i["music_item"] for i in listed["items"]], ["Overture", "Symphony"])
+        self.assertLess(listed["items"][0]["order"], listed["items"][1]["order"])
+
     def test_rsvp_set_filters_to_persons_own_instruments(self):
         fam = models.InstrumentFamily.objects.create(name="Strings")
         violin = models.Instrument.objects.create(name="Violin", family=fam)

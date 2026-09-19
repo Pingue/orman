@@ -421,7 +421,7 @@ def tool_repertoire_set(args, person):
         music_item = models.MusicItem.objects.get(pk=args.get("music_item_id"))
     except models.MusicItem.DoesNotExist:
         raise ToolError(f"No music_item with id {args.get('music_item_id')}.")
-    order = int(args.get("order", 1))
+    order_arg = args.get("order")
     start_time = _parse_time_arg(args.get("start_time"))
     item_id = args.get("item_id")
     if item_id:
@@ -429,9 +429,17 @@ def tool_repertoire_set(args, person):
             item = item_model.objects.get(pk=item_id, **{fk_name: event})
         except item_model.DoesNotExist:
             raise ToolError(f"No repertoire item with id {item_id} on this {args.get('event_type')}.")
-        item.musicItem, item.order, item.start_time = music_item, order, start_time
+        item.musicItem = music_item
+        item.order = int(order_arg) if order_arg is not None else item.order
+        item.start_time = start_time
         item.save()
     else:
+        if order_arg is not None:
+            order = int(order_arg)
+        else:
+            items_qs = item_model.objects.filter(**{fk_name: event})
+            last = items_qs.order_by("order").last()
+            order = (last.order + 1) if last else 1
         item = item_model.objects.create(
             **{fk_name: event, "musicItem": music_item, "order": order, "start_time": start_time},
         )
@@ -878,7 +886,11 @@ TOOLS = [
                 "event_type": _EVENT_TYPE, "event_id": _INT,
                 "item_id": {**_INT, "description": "Omit to add a new line."},
                 "music_item_id": _INT,
-                "order": {**_INT, "default": 1},
+                "order": {
+                    **_INT,
+                    "description": "Position in the programme. Omit to append after the last "
+                    "existing line (or to leave an existing line's position unchanged).",
+                },
                 "start_time": {**_STRING, "description": "HH:MM, optional."},
             },
             "required": ["event_type", "event_id", "music_item_id"],
