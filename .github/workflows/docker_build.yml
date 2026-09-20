@@ -18,7 +18,7 @@ jobs:
     outputs:
       fullSemVer: ${{ steps.gitversion.outputs.fullSemVer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -58,7 +58,7 @@ jobs:
     env:
       fullSemVer: ${{ needs.semver.outputs.fullSemVer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-tags: true
 
