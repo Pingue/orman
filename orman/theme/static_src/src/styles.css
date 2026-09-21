@@ -3,8 +3,8 @@
 @source "../templates/**/*.html";
 @source "../../templates/**/*.html";
 @source "../../**/templates/**/*.html";
-@source "../../**/*.js";
-@source "../../**/*.py";
+
+/* Add JS/Python @source globs here if Tailwind classes are introduced outside templates. */
 
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
