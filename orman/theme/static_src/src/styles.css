@@ -3,6 +3,8 @@
 @source "../templates/**/*.html";
 @source "../../templates/**/*.html";
 @source "../../**/templates/**/*.html";
+@source "../../**/*.js";
+@source "../../**/*.py";
 
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
