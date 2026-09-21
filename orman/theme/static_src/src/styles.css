@@ -1,3 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@source "../templates/**/*.html";
+@source "../../templates/**/*.html";
+@source "../../../**/templates/**/*.html";
+@source "../../../**/*.py";
+
+/* Add JS @source globs here if Tailwind classes are introduced outside templates or Python. */
+
+@plugin "@tailwindcss/forms";
+@plugin "@tailwindcss/typography";
+@plugin "daisyui" {
+  themes: cupcake --default, night --prefersdark;
+  root: ":root";
+  logs: true;
+}
