@@ -6,5 +6,5 @@ django-tailwind==4.5.0
 gunicorn==26.2.0
 Markdown>=3.10.3,<4
 Pillow>=12.3.0,<13
-webauthn>=2.0
+webauthn>=3.0.0
 whitenoise==6.7.0
