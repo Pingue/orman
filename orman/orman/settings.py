@@ -208,7 +208,7 @@ SITE_ID = 1
 
 # django-allauth configuration (active when SOCIAL_LOGIN_ENABLED = True)
 AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
+    "orman.backends.CaseInsensitiveEmailBackend",
 ]
 if SOCIAL_LOGIN_ENABLED:
     AUTHENTICATION_BACKENDS += ["allauth.account.auth_backends.AuthenticationBackend"]

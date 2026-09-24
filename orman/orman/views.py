@@ -267,7 +267,7 @@ def passkey_auth_complete(request):
     passkey.last_used_at = timezone.now()
     passkey.save(update_fields=["sign_count", "last_used_at"])
 
-    _auth_login(request, passkey.person, backend="django.contrib.auth.backends.ModelBackend")
+    _auth_login(request, passkey.person, backend="orman.backends.CaseInsensitiveEmailBackend")
     return JsonResponse({"ok": True, "next": "/"})
 
 
