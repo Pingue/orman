@@ -696,6 +696,17 @@ class MemberPagesTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Sign in")
 
+    def test_login_is_case_insensitive(self):
+        # The account's email is "mike@example.com" — logging in with a
+        # differently-cased variant should still work, and the session
+        # should stick around for the next request.
+        resp = self.client.post(reverse("login"), {
+            "username": "Mike@Example.COM", "password": "secret",
+        })
+        self.assertEqual(resp.status_code, 302)
+        resp = self.client.get(reverse("index"))
+        self.assertContains(resp, "Sign out")
+
 
 def _tiny_png(name="test.png"):
     import io
