@@ -283,7 +283,7 @@ class RSVP(models.Model):
                 name="unique_rsvp_performance",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(rehearsal__isnull=False, performance__isnull=True)
                     | models.Q(rehearsal__isnull=True, performance__isnull=False)
                 ),
