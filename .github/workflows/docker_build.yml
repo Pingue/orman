@@ -39,7 +39,7 @@ jobs:
           echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
 
       - name: Create tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.git.createRef({
