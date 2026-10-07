@@ -1,7 +1,7 @@
 [![CI](https://github.com/Pingue/orman/actions/workflows/ci.yml/badge.svg)](https://github.com/Pingue/orman/actions/workflows/ci.yml)
 [![Docker Build & Publish to GitHub Container Registry](https://github.com/Pingue/orman/actions/workflows/docker_build.yml/badge.svg)](https://github.com/Pingue/orman/actions/workflows/docker_build.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](requirements.txt)
 [![Django](https://img.shields.io/badge/django-4.2-092E20?logo=django&logoColor=white)](requirements.txt)
 [![Tailwind CSS](https://img.shields.io/badge/tailwind-4-38BDF8?logo=tailwindcss&logoColor=white)](orman/theme/static_src/package.json)
 
@@ -45,7 +45,7 @@ email threads.
 
 ## Tech stack
 
-- [Django](https://www.djangoproject.com/) 4.2 (Python 3.11+), SQLite
+- [Django](https://www.djangoproject.com/) 4.2 (Python 3.12+), SQLite
 - [Tailwind CSS 4](https://tailwindcss.com/) + [DaisyUI 5](https://daisyui.com/) via [django-tailwind](https://github.com/timonweb/django-tailwind)
 - [django-allauth](https://allauth.org/) for authentication, [webauthn](https://pypi.org/project/webauthn/) for passkeys
 - Single-container Docker image (multi-stage: Node builds CSS, Python serves via gunicorn + whitenoise)
