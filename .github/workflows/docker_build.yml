@@ -85,7 +85,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMG }}
 
       - name: Build and push (branch/PR builds)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: github.ref != 'refs/heads/main'
         with:
           context: .
@@ -97,7 +97,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push versioned (main)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: github.ref == 'refs/heads/main'
         with:
           context: .
@@ -109,7 +109,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push latest (main)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: github.ref == 'refs/heads/main'
         with:
           context: .
