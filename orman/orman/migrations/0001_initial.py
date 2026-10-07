@@ -361,7 +361,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='rsvp',
-            constraint=models.CheckConstraint(check=models.Q(models.Q(('performance__isnull', True), ('rehearsal__isnull', False)), models.Q(('performance__isnull', False), ('rehearsal__isnull', True)), _connector='OR'), name='rsvp_exactly_one_event'),
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('performance__isnull', True), ('rehearsal__isnull', False)), models.Q(('performance__isnull', False), ('rehearsal__isnull', True)), _connector='OR'), name='rsvp_exactly_one_event'),
         ),
         migrations.AddConstraint(
             model_name='pollanswer',
