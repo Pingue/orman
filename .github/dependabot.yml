@@ -12,6 +12,12 @@ updates:
     schedule:
       interval: "weekly"
 
+  # npm dependencies for the legacy app
+  - package-ecosystem: "npm"
+    directory: "/orman/orman/static_src"
+    schedule:
+      interval: "weekly"
+
   # npm dependencies at the repo root
   - package-ecosystem: "npm"
     directory: "/"
