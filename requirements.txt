@@ -5,6 +5,6 @@ django-ses>=4.8.2,<5
 django-tailwind==4.6.0
 gunicorn==26.2.0
 Markdown>=3.11.1,<4
-Pillow>=12.3.0,<13
+Pillow>=13.0.0,<14
 webauthn>=3.0.1
 whitenoise==6.12.0
