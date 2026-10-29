@@ -5,33 +5,57 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      pip-all:
+        patterns:
+          - "*"
 
   # npm dependencies for the active Tailwind theme app
   - package-ecosystem: "npm"
     directory: "/orman/theme/static_src"
     schedule:
       interval: "weekly"
+    groups:
+      npm-theme-all:
+        patterns:
+          - "*"
 
   # npm dependencies for the legacy app
   - package-ecosystem: "npm"
     directory: "/orman/orman/static_src"
     schedule:
       interval: "weekly"
+    groups:
+      npm-legacy-all:
+        patterns:
+          - "*"
 
   # npm dependencies at the repo root
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      npm-root-all:
+        patterns:
+          - "*"
 
   # Dockerfile base image
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      docker-all:
+        patterns:
+          - "*"
 
   # Actions used in .github/workflows
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
