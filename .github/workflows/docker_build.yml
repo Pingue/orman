@@ -13,6 +13,9 @@ env:
 jobs:
   semver:
     runs-on: ubuntu-latest
+    concurrency:
+      group: docker-build-semver
+      queue: max
     permissions:
       contents: write
     outputs:
