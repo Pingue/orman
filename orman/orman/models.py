@@ -34,6 +34,17 @@ class PersonManager(BaseUserManager):
 
 
 class Person(AbstractBaseUser, PermissionsMixin):
+    THEME_WARM = "warm"
+    THEME_CONCERT = "concert"
+    THEME_BOLD = "bold"
+    THEME_MINIMAL = "minimal"
+    THEME_CHOICES = [
+        (THEME_WARM, "Warm & organic"),
+        (THEME_CONCERT, "Concert-hall elegant"),
+        (THEME_BOLD, "Bold modern"),
+        (THEME_MINIMAL, "Minimal editorial"),
+    ]
+
     firstNames = models.CharField(max_length=200, verbose_name="first names")
     lastName = models.CharField(max_length=200, verbose_name="last name")
     email = models.EmailField(unique=True)
@@ -47,6 +58,9 @@ class Person(AbstractBaseUser, PermissionsMixin):
         default=_uuid.uuid4, editable=False, null=True, blank=True,
         verbose_name="MCP API token",
         help_text="Bearer token for the /mcp/ endpoint. Only grants access while the account is an admin.",
+    )
+    themeStyle = models.CharField(
+        max_length=20, choices=THEME_CHOICES, default=THEME_WARM, verbose_name="theme",
     )
 
     objects = PersonManager()

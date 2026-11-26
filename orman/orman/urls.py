@@ -42,6 +42,7 @@ urlpatterns = [
 
     # Member-facing pages (top-left navbar dropdown).
     path("profile/", views.profile, name="profile"),
+    path("profile/theme/", views.update_theme, name="update_theme"),
     path("announcement/<int:id>/dismiss/", views.dismiss_announcement, name="dismiss_announcement"),
     path("regenerate_mcp_token/", views.regenerate_mcp_token, name="regenerate_mcp_token"),
     path("events/", views.events, name="events"),

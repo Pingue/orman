@@ -9,8 +9,444 @@
 
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
+
+/* Four overall styles, each with a light + dark pair. The style is an
+   account setting (profile page); the light/dark/system mode is a
+   device-local preference. base.html combines them into "<style>-<mode>",
+   which is exactly the theme name daisyUI looks up here. Built-in themes
+   are disabled (themes: false) since these eight fully replace them. */
 @plugin "daisyui" {
-  themes: cupcake --default, night --prefersdark;
+  themes: false;
   root: ":root";
   logs: true;
+}
+
+/* Warm & organic — terracotta, amber and cream. */
+@plugin "daisyui/theme" {
+  name: "warm-light";
+  default: true;
+  color-scheme: light;
+  --color-primary: #E0A458;
+  --color-primary-content: #2A1A0E;
+  --color-secondary: #C1622D;
+  --color-secondary-content: #FDEFE1;
+  --color-accent: #8A4A1E;
+  --color-accent-content: #FDEFE1;
+  --color-neutral: #3E2A1D;
+  --color-neutral-content: #FBF1E6;
+  --color-base-100: #FBF1E6;
+  --color-base-200: #F3E3CC;
+  --color-base-300: #E8D3B0;
+  --color-base-content: #3E2A1D;
+  --color-info: #3D7A8A;
+  --color-info-content: #EAF6F8;
+  --color-success: #5B7F3A;
+  --color-success-content: #F3F8EC;
+  --color-warning: #C9872B;
+  --color-warning-content: #2A1A0E;
+  --color-error: #B5452E;
+  --color-error-content: #FBEDE8;
+  --radius-box: 1rem;
+  --radius-field: 0.75rem;
+  --radius-selector: 9999px;
+}
+@plugin "daisyui/theme" {
+  name: "warm-dark";
+  color-scheme: dark;
+  --color-primary: #E0A458;
+  --color-primary-content: #2A1A0E;
+  --color-secondary: #D9733A;
+  --color-secondary-content: #2A1206;
+  --color-accent: #E8B873;
+  --color-accent-content: #2A1A0E;
+  --color-neutral: #2C2017;
+  --color-neutral-content: #F1E2D0;
+  --color-base-100: #221711;
+  --color-base-200: #2C2017;
+  --color-base-300: #3A2A1D;
+  --color-base-content: #F1E2D0;
+  --color-info: #6FB4C4;
+  --color-info-content: #0D2226;
+  --color-success: #8FB36B;
+  --color-success-content: #15210C;
+  --color-warning: #D99A3E;
+  --color-warning-content: #2A1A0E;
+  --color-error: #E0725A;
+  --color-error-content: #2A1206;
+  --radius-box: 1rem;
+  --radius-field: 0.75rem;
+  --radius-selector: 9999px;
+}
+
+/* Concert-hall elegant — burgundy & gold, serif headings. */
+@plugin "daisyui/theme" {
+  name: "concert-light";
+  color-scheme: light;
+  --color-primary: #C6A15B;
+  --color-primary-content: #2A1F18;
+  --color-secondary: #6B1E2B;
+  --color-secondary-content: #F3E6D8;
+  --color-accent: #7A5A1E;
+  --color-accent-content: #F3E6D8;
+  --color-neutral: #2A1F18;
+  --color-neutral-content: #FAF6EF;
+  --color-base-100: #FAF6EF;
+  --color-base-200: #F1E3C6;
+  --color-base-300: #E8DCC8;
+  --color-base-content: #2A1F18;
+  --color-info: #3D6B7A;
+  --color-info-content: #EAF4F6;
+  --color-success: #4F7A3A;
+  --color-success-content: #F1F7EC;
+  --color-warning: #B8863A;
+  --color-warning-content: #2A1F18;
+  --color-error: #8B2635;
+  --color-error-content: #FBE9EC;
+  --radius-box: 0.5rem;
+  --radius-field: 0.4rem;
+  --radius-selector: 9999px;
+}
+@plugin "daisyui/theme" {
+  name: "concert-dark";
+  color-scheme: dark;
+  --color-primary: #D4AF6A;
+  --color-primary-content: #231708;
+  --color-secondary: #8C2B3A;
+  --color-secondary-content: #EBDAC0;
+  --color-accent: #D9B977;
+  --color-accent-content: #231708;
+  --color-neutral: #241A14;
+  --color-neutral-content: #ECE0CC;
+  --color-base-100: #1A1310;
+  --color-base-200: #241A14;
+  --color-base-300: #3A2C21;
+  --color-base-content: #ECE0CC;
+  --color-info: #6FA8B8;
+  --color-info-content: #0E2024;
+  --color-success: #7FAE63;
+  --color-success-content: #13200C;
+  --color-warning: #D9A95C;
+  --color-warning-content: #231708;
+  --color-error: #C4506A;
+  --color-error-content: #2A0810;
+  --radius-box: 0.5rem;
+  --radius-field: 0.4rem;
+  --radius-selector: 9999px;
+}
+
+/* Bold modern gradient — violet to magenta, Space Grotesk. */
+@plugin "daisyui/theme" {
+  name: "bold-light";
+  color-scheme: light;
+  --color-primary: #7C3AED;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #DB2777;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #5B21B6;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #14152B;
+  --color-neutral-content: #F3F4FA;
+  --color-base-100: #F3F4FA;
+  --color-base-200: #ECECF7;
+  --color-base-300: #DAD9F0;
+  --color-base-content: #14152B;
+  --color-info: #2563EB;
+  --color-info-content: #EAF1FF;
+  --color-success: #16A34A;
+  --color-success-content: #EAFBF0;
+  --color-warning: #D97706;
+  --color-warning-content: #2A1500;
+  --color-error: #DC2626;
+  --color-error-content: #FFEAEA;
+  --radius-box: 1.25rem;
+  --radius-field: 1rem;
+  --radius-selector: 9999px;
+}
+@plugin "daisyui/theme" {
+  name: "bold-dark";
+  color-scheme: dark;
+  --color-primary: #8B5CF6;
+  --color-primary-content: #140A1F;
+  --color-secondary: #EC4899;
+  --color-secondary-content: #2A0A18;
+  --color-accent: #A78BFA;
+  --color-accent-content: #140A1F;
+  --color-neutral: #181934;
+  --color-neutral-content: #E6E6F7;
+  --color-base-100: #0F1021;
+  --color-base-200: #181934;
+  --color-base-300: #232454;
+  --color-base-content: #E6E6F7;
+  --color-info: #60A5FA;
+  --color-info-content: #0A1A2E;
+  --color-success: #4ADE80;
+  --color-success-content: #07210F;
+  --color-warning: #FBBF24;
+  --color-warning-content: #2A1A00;
+  --color-error: #F87171;
+  --color-error-content: #2A0A0A;
+  --radius-box: 1.25rem;
+  --radius-field: 1rem;
+  --radius-selector: 9999px;
+}
+
+/* Minimal editorial — mono + one red accent, hairline rules. */
+@plugin "daisyui/theme" {
+  name: "minimal-light";
+  color-scheme: light;
+  --color-primary: #121212;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #D64545;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #D64545;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #121212;
+  --color-neutral-content: #FFFFFF;
+  --color-base-100: #FFFFFF;
+  --color-base-200: #FAFAFA;
+  --color-base-300: #E5E5E5;
+  --color-base-content: #121212;
+  --color-info: #2563EB;
+  --color-info-content: #FFFFFF;
+  --color-success: #15803D;
+  --color-success-content: #FFFFFF;
+  --color-warning: #B45309;
+  --color-warning-content: #FFFFFF;
+  --color-error: #B91C1C;
+  --color-error-content: #FFFFFF;
+  --radius-box: 0.25rem;
+  --radius-field: 0.3rem;
+  --radius-selector: 0.25rem;
+}
+@plugin "daisyui/theme" {
+  name: "minimal-dark";
+  color-scheme: dark;
+  --color-primary: #F0F0F0;
+  --color-primary-content: #0A0A0A;
+  --color-secondary: #FF6B5A;
+  --color-secondary-content: #2A0A06;
+  --color-accent: #FF6B5A;
+  --color-accent-content: #2A0A06;
+  --color-neutral: #F0F0F0;
+  --color-neutral-content: #0A0A0A;
+  --color-base-100: #0A0A0A;
+  --color-base-200: #141414;
+  --color-base-300: #2A2A2A;
+  --color-base-content: #F0F0F0;
+  --color-info: #60A5FA;
+  --color-info-content: #0A0A0A;
+  --color-success: #4ADE80;
+  --color-success-content: #0A0A0A;
+  --color-warning: #FBBF24;
+  --color-warning-content: #0A0A0A;
+  --color-error: #F87171;
+  --color-error-content: #0A0A0A;
+  --radius-box: 0.25rem;
+  --radius-field: 0.3rem;
+  --radius-selector: 0.25rem;
+}
+
+@layer base {
+  :root {
+    --font-display: 'Quicksand', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  [data-theme^="concert-"] {
+    --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  }
+  [data-theme^="bold-"] {
+    --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  [data-theme^="minimal-"] {
+    --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  h1, h2, h3, h4,
+  .card-title,
+  .navbar-brand,
+  .menu-title,
+  .modal-box h1, .modal-box h2, .modal-box h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+  [data-theme^="minimal-"] h1,
+  [data-theme^="minimal-"] h2,
+  [data-theme^="minimal-"] h3,
+  [data-theme^="minimal-"] h4,
+  [data-theme^="minimal-"] .card-title {
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  /* ---------------------------------------------------------------------
+     Card elevation — soft shadow by default, tinted per style; minimal
+     drops the shadow entirely in favour of a hairline border + accent edge.
+     --------------------------------------------------------------------- */
+  .card {
+    box-shadow: 0 10px 28px -14px rgba(120, 72, 36, 0.35);
+  }
+  [data-theme$="-dark"] .card {
+    box-shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.55);
+  }
+  [data-theme^="bold-"] .card {
+    box-shadow: 0 10px 28px -14px rgba(91, 33, 182, 0.3);
+  }
+  [data-theme^="minimal-"] .card {
+    box-shadow: none;
+    border: 1px solid var(--color-base-300);
+    border-left: 3px solid currentColor;
+  }
+
+  /* ---------------------------------------------------------------------
+     Brand bar. Structure (staff, clef, chips, focus ring) is shared across
+     all four styles; only colour/gradient differs, set per data-theme below.
+     Decoupled from the secondary/secondary-content tokens on purpose, so
+     ordinary uses of "secondary" elsewhere (e.g. btn-secondary) aren't
+     affected by the navbar's own colour choices.
+     --------------------------------------------------------------------- */
+  .navbar {
+    position: relative;
+    isolation: isolate;
+    z-index: 30;
+  }
+
+  [data-theme="warm-light"] .navbar {
+    background: linear-gradient(135deg, #3B2213 0%, #8A4A1E 28%, #C1622D 55%, #C1622D 100%);
+    color: #FBEEDD;
+  }
+  [data-theme="warm-dark"] .navbar {
+    background: linear-gradient(135deg, #1C120A 0%, #5A331A 28%, #9A5726 55%, #9A5726 100%);
+    color: #FBEEDD;
+  }
+
+  [data-theme="concert-light"] .navbar {
+    background: linear-gradient(135deg, #2A0810 0%, #4A1420 30%, #6B1E2B 100%);
+    color: #F3E6D8;
+  }
+  [data-theme="concert-dark"] .navbar {
+    background: linear-gradient(135deg, #190509 0%, #3A1018 30%, #5A1824 100%);
+    color: #EBDAC0;
+  }
+
+  [data-theme="bold-light"] .navbar {
+    background: linear-gradient(135deg, #1F0A3D 0%, #6D28D9 40%, #DB2777 100%);
+    color: #FFFFFF;
+  }
+  [data-theme="bold-dark"] .navbar {
+    background: linear-gradient(135deg, #0D0620 0%, #4C1D8A 40%, #99155A 100%);
+    color: #F0E9FF;
+  }
+
+  [data-theme="minimal-light"] .navbar {
+    background: #FFFFFF;
+    color: #121212;
+  }
+  [data-theme="minimal-dark"] .navbar {
+    background: #0A0A0A;
+    color: #F0F0F0;
+  }
+
+  /* Persistent, subtle translucent chip behind every navbar control, so text
+     stays legible wherever it lands on a gradient — not just on hover.
+     Minimal has no gradient to worry about, so it gets a much quieter chip
+     with the polarity flipped to suit its flat light/dark bars. */
+  .navbar .btn-ghost {
+    background-color: rgba(0, 0, 0, 0.18);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+  }
+  .navbar .btn-ghost:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+  [data-theme="minimal-light"] .navbar .btn-ghost {
+    background-color: rgba(0, 0, 0, 0.05);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  [data-theme="minimal-light"] .navbar .btn-ghost:hover {
+    background-color: rgba(0, 0, 0, 0.09);
+  }
+  [data-theme="minimal-dark"] .navbar .btn-ghost {
+    background-color: rgba(255, 255, 255, 0.07);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  [data-theme="minimal-dark"] .navbar .btn-ghost:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  /* An outward outline bleeds into tightly-packed neighbours (the clef,
+     the brand mark). Ring it inside the button's own box instead, in a
+     tint of whatever the bar's own text colour is — so it needs no
+     per-theme override. */
+  .navbar .btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 65%, transparent);
+  }
+
+  /* A faint 5-line staff running the width of the bar, behind the brand
+     mark — colour follows the bar's own text colour via currentColor, so
+     it adapts automatically across all eight style/mode combinations. */
+  .navbar::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 33px;
+    transform: translateY(-50%);
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.16;
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    background-position:
+      0 0,
+      0 8px,
+      0 16px,
+      0 24px,
+      0 32px;
+    background-image:
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor),
+      linear-gradient(currentColor, currentColor);
+  }
+
+  /* Alto (C) clef sitting on the staff, far left of the brand mark —
+     taller than the row so it reads as engraved on the staff rather
+     than an icon lined up with the wordmark's baseline. */
+  .staff-clef {
+    height: 42px;
+    width: auto;
+    flex-shrink: 0;
+    opacity: 0.55;
+    color: currentColor;
+    margin: -5px 0.1rem -5px -0.15rem;
+    position: relative;
+    top: 1px;
+  }
+
+  /* Accent underline — a gradient flourish for warm/concert/bold; a plain
+     hairline (matching the "hairline rule" motif) for minimal. */
+  .navbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--color-accent), var(--color-primary));
+    opacity: 0.8;
+  }
+  [data-theme^="minimal-"] .navbar::after {
+    background: currentColor;
+    opacity: 0.25;
+    height: 1px;
+    bottom: -1px;
+  }
 }
