@@ -28,7 +28,7 @@
   color-scheme: light;
   --color-primary: #E0A458;
   --color-primary-content: #2A1A0E;
-  --color-secondary: #C1622D;
+  --color-secondary: #8F451C;
   --color-secondary-content: #FDEFE1;
   --color-accent: #8A4A1E;
   --color-accent-content: #FDEFE1;
@@ -38,9 +38,9 @@
   --color-base-200: #F3E3CC;
   --color-base-300: #E8D3B0;
   --color-base-content: #3E2A1D;
-  --color-info: #3D7A8A;
+  --color-info: #2F6270;
   --color-info-content: #EAF6F8;
-  --color-success: #5B7F3A;
+  --color-success: #4F7030;
   --color-success-content: #F3F8EC;
   --color-warning: #C9872B;
   --color-warning-content: #2A1A0E;
@@ -127,7 +127,7 @@
   --color-success-content: #13200C;
   --color-warning: #D9A95C;
   --color-warning-content: #231708;
-  --color-error: #C4506A;
+  --color-error: #D4728A;
   --color-error-content: #2A0810;
   --radius-box: 0.5rem;
   --radius-field: 0.4rem;
@@ -152,11 +152,11 @@
   --color-base-content: #14152B;
   --color-info: #2563EB;
   --color-info-content: #EAF1FF;
-  --color-success: #16A34A;
+  --color-success: #0F7A38;
   --color-success-content: #EAFBF0;
   --color-warning: #D97706;
   --color-warning-content: #2A1500;
-  --color-error: #DC2626;
+  --color-error: #C81E1E;
   --color-error-content: #FFEAEA;
   --radius-box: 1.25rem;
   --radius-field: 1rem;
@@ -196,9 +196,9 @@
   color-scheme: light;
   --color-primary: #121212;
   --color-primary-content: #FFFFFF;
-  --color-secondary: #D64545;
+  --color-secondary: #C93838;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #D64545;
+  --color-accent: #C93838;
   --color-accent-content: #FFFFFF;
   --color-neutral: #121212;
   --color-neutral-content: #FFFFFF;
@@ -301,7 +301,7 @@
   }
 
   /* ---------------------------------------------------------------------
-     Brand bar. Structure (staff, clef, chips, focus ring) is shared across
+     Brand bar. Structure (staff, chips, focus ring) is shared across
      all four styles; only colour/gradient differs, set per data-theme below.
      Decoupled from the secondary/secondary-content tokens on purpose, so
      ordinary uses of "secondary" elsewhere (e.g. btn-secondary) aren't
@@ -378,13 +378,53 @@
     background-color: rgba(255, 255, 255, 0.12);
   }
 
-  /* An outward outline bleeds into tightly-packed neighbours (the clef,
-     the brand mark). Ring it inside the button's own box instead, in a
+  /* An outward outline bleeds into tightly-packed neighbours (the
+     brand mark). Ring it inside the button's own box instead, in a
      tint of whatever the bar's own text colour is — so it needs no
      per-theme override. */
-  .navbar .btn:focus-visible {
+  .navbar .btn:focus {
     outline: none;
+  }
+  .navbar .btn:focus-visible {
     box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 65%, transparent);
+  }
+
+  /* Hamburger toggle: the bars spin away as a clef spins in (rotated 90°
+     clockwise once open), so the icon itself animates the open/closed
+     state instead of just swapping. Both icons sit stacked in the same
+     spot so the crossfade has something to cross over. */
+  .menu-icon {
+    position: relative;
+    display: inline-flex;
+    width: 1.1em;
+    height: 1.1em;
+  }
+  .menu-icon-bars,
+  .menu-icon-clef {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transition: opacity 220ms ease, transform 220ms ease;
+  }
+  .menu-icon-bars {
+    width: 1em;
+    height: 0.75em;
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  .menu-icon-clef {
+    height: 1.05em;
+    width: auto;
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  #navMenu[open] > summary .menu-icon-bars {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-90deg);
+  }
+  #navMenu[open] > summary .menu-icon-clef {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(90deg);
   }
 
   /* A faint 5-line staff running the width of the bar, behind the brand
@@ -415,20 +455,6 @@
       linear-gradient(currentColor, currentColor),
       linear-gradient(currentColor, currentColor),
       linear-gradient(currentColor, currentColor);
-  }
-
-  /* Alto (C) clef sitting on the staff, far left of the brand mark —
-     taller than the row so it reads as engraved on the staff rather
-     than an icon lined up with the wordmark's baseline. */
-  .staff-clef {
-    height: 42px;
-    width: auto;
-    flex-shrink: 0;
-    opacity: 0.55;
-    color: currentColor;
-    margin: -5px 0.1rem -5px -0.15rem;
-    position: relative;
-    top: 1px;
   }
 
   /* Accent underline — a gradient flourish for warm/concert/bold; a plain
