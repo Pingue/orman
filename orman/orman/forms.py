@@ -73,6 +73,14 @@ class ProfileForm(_DaisyFormMixin, forms.ModelForm):
         }
 
 
+class ThemeForm(_DaisyFormMixin, forms.ModelForm):
+    """The overall visual theme — separate from the light/dark/system mode,
+    which is a device-local preference handled entirely in JS."""
+    class Meta:
+        model = models.Person
+        fields = ["themeStyle"]
+
+
 class PersonForm(_DaisyFormMixin, forms.ModelForm):
     class Meta:
         model = models.Person

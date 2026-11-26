@@ -2,7 +2,7 @@
 {% block title %}My profile | Orman{% endblock %}
 {% block content %}
 
-<div class="card bg-base-200 border border-base-content/30 max-w-2xl">
+<div class="card bg-base-200 max-w-2xl">
   <div class="card-body">
     <h1 class="card-title">My profile</h1>
 
@@ -33,7 +33,44 @@
   </div>
 </div>
 
-<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6" id="passkeys-card">
+<div class="card bg-base-200 max-w-2xl mt-6">
+  <div class="card-body">
+    <h2 class="card-title text-lg">Appearance</h2>
+
+    <form method="post" action="{% url 'update_theme' %}" class="mt-1">
+      {% csrf_token %}
+      <label class="label-text block mb-2">Theme</label>
+      <div class="flex flex-wrap gap-2">
+        {% for value, label in theme_form.themeStyle.field.choices %}
+          <button type="submit" name="themeStyle" value="{{ value }}"
+                  class="btn btn-sm {% if person.themeStyle == value %}btn-primary{% else %}btn-outline{% endif %}">
+            {{ label }}
+          </button>
+        {% endfor %}
+      </div>
+    </form>
+
+    <div class="mt-5">
+      <label class="label-text block mb-1">Light / dark mode</label>
+      <p class="text-xs opacity-60 mb-2">
+        This is remembered on this device only, independent of the theme above.
+      </p>
+      <div class="join">
+        <button type="button" class="btn btn-sm join-item" data-theme-set="light">
+          <i class="fas fa-sun w-4"></i> Light
+        </button>
+        <button type="button" class="btn btn-sm join-item" data-theme-set="dark">
+          <i class="fas fa-moon w-4"></i> Dark
+        </button>
+        <button type="button" class="btn btn-sm join-item" data-theme-set="system">
+          <i class="fas fa-desktop w-4"></i> System
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card bg-base-200 max-w-2xl mt-6" id="passkeys-card">
   <div class="card-body">
     <h2 class="card-title text-lg">Passkeys</h2>
     <p class="text-sm opacity-70">
@@ -74,7 +111,7 @@
   </div>
 </div>
 
-<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+<div class="card bg-base-200 max-w-2xl mt-6">
   <div class="card-body">
     <h2 class="card-title text-lg">Calendar subscription</h2>
     <p class="text-sm opacity-70">
@@ -94,7 +131,7 @@
   </div>
 </div>
 
-<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+<div class="card bg-base-200 max-w-2xl mt-6">
   <div class="card-body">
     <h2 class="card-title text-lg">MCP API access</h2>
     <p class="text-sm opacity-70">

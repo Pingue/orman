@@ -478,7 +478,18 @@ def profile(request):
             return redirect("profile")
     else:
         form = forms.ProfileForm(instance=request.user)
-    return render(request, "profile.html", {"person": request.user, "form": form})
+    theme_form = forms.ThemeForm(instance=request.user)
+    return render(request, "profile.html", {"person": request.user, "form": form, "theme_form": theme_form})
+
+
+@login_required
+@require_POST
+def update_theme(request):
+    form = forms.ThemeForm(request.POST, instance=request.user)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Theme updated.")
+    return redirect("profile")
 
 
 @login_required

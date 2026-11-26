@@ -23,7 +23,7 @@
 <!-- Existing parts -->
 <div class="max-w-2xl space-y-2" id="parts-list">
   {% for part in parts %}
-    <div class="card bg-base-200 border border-base-content/30" data-id="{{ part.id }}">
+    <div class="card bg-base-200" data-id="{{ part.id }}">
       <div class="card-body p-3 gap-2">
         <div class="flex items-center gap-3 flex-wrap">
           <span class="font-semibold w-44 truncate" id="label-{{ part.id }}" title="{{ part.label }}">{{ part.label }}</span>
@@ -99,7 +99,7 @@
 </div>
 
 <!-- Add new part form -->
-<div class="card bg-base-200 border border-base-content/30 max-w-2xl mt-6">
+<div class="card bg-base-200 max-w-2xl mt-6">
   <div class="card-body p-4 gap-3">
     <h2 class="card-title text-base">Add part</h2>
     <div>
@@ -267,7 +267,7 @@
           fileDisplay = `<span class="opacity-40 italic" id="fname-${data.id}">No file or link yet</span>`;
         }
         const card = document.createElement("div");
-        card.className = "card bg-base-200 border border-base-content/30"; card.dataset.id = data.id;
+        card.className = "card bg-base-200"; card.dataset.id = data.id;
         card.innerHTML = `
           <div class="card-body p-3 gap-2">
             <div class="flex items-center gap-3 flex-wrap">
