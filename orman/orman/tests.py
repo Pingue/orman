@@ -10,10 +10,12 @@ import tempfile
 from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
-from . import models
+from . import models, views
 
 Person = get_user_model()
 
@@ -991,6 +993,47 @@ class ProfileEditTests(TestCase):
     def test_profile_page_has_change_password_link(self):
         resp = self.client.get(reverse("profile"))
         self.assertContains(resp, reverse("password_change"))
+
+
+class ThemeUpdateTests(TestCase):
+    """update_theme() must only ever touch the themeStyle column.
+
+    Regression test for a bug flagged in review: the view used to build a
+    ThemeForm with instance=request.user and call form.save(), which writes
+    every column on that instance. If request.user was loaded before some
+    other request/process changed a permission or credential, saving it
+    back would silently revert that change. Simulated here by loading a
+    Person, granting admin "behind its back", then driving the view with
+    that now-stale instance as request.user.
+    """
+
+    def setUp(self):
+        self.user = _make_user(email="mike@example.com", is_admin=False)
+
+    def _post_theme_update(self, request_user, theme_style):
+        request = RequestFactory().post("/profile/theme/", {"themeStyle": theme_style})
+        request.user = request_user
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        return views.update_theme(request)
+
+    def test_update_theme_does_not_revert_concurrent_admin_grant(self):
+        stale_user = models.Person.objects.get(pk=self.user.pk)
+        models.Person.objects.filter(pk=self.user.pk).update(is_admin=True)
+
+        resp = self._post_theme_update(stale_user, "bold")
+
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_admin, "a concurrent admin grant must survive a theme update")
+        self.assertEqual(self.user.themeStyle, "bold")
+
+    def test_update_theme_rejects_unknown_style(self):
+        resp = self._post_theme_update(self.user, "not-a-real-style")
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.themeStyle, models.Person.THEME_WARM)
 
 
 class AnnouncementDismissalTests(TestCase):
