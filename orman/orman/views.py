@@ -487,7 +487,14 @@ def profile(request):
 def update_theme(request):
     form = forms.ThemeForm(request.POST, instance=request.user)
     if form.is_valid():
-        form.save()
+        # A plain form.save() would rewrite every column on request.user,
+        # which can be stale by the time this runs — overwriting a
+        # concurrent permission/credential change (e.g. an admin revoking
+        # access, or a token rotation) with the old in-memory values.
+        # Update only the one column this form actually owns.
+        models.Person.objects.filter(pk=request.user.pk).update(
+            themeStyle=form.cleaned_data["themeStyle"]
+        )
         messages.success(request, "Theme updated.")
     return redirect("profile")
 
